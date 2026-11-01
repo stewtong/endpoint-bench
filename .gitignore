@@ -1,5 +1,35 @@
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
 .DS_Store
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# Benchmark evidence is local by default. Small, intentionally synthetic fixtures
+# may be committed under examples/ or tests/fixtures/.
+results/
+runs/
+*.jsonl.raw
+*.json.raw
+aa_snapshots/
+aa-cache/
+traces/
+*.har
+*.log
+
+# Local machine configuration
+.claude/
+.codex/
+.idea/
+.vscode/

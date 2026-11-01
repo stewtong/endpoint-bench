@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "name": "smoke",
+  "description": "Network-free dry-run example; no inference requests are sent.",
+  "request_count": 2,
+  "input_tokens": 128,
+  "max_output_tokens": 32,
+  "concurrency": 1,
+  "streaming": true
+}

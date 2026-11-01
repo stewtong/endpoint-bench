@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "providers": [
+    {
+      "name": "offline-mock",
+      "base_url": "http://127.0.0.1:9/v1",
+      "protocol": "openai-chat-completions",
+      "region": "local-synthetic",
+      "credential_env_name": "ENDPOINT_BENCH_OFFLINE_API_KEY",
+      "deployments": [
+        {
+          "deployment_key": "offline-mock-smoke",
+          "model_id": "offline-mock-model",
+          "model_revision": "synthetic-2026-11-01",
+          "context": {
+            "advertised_input_tokens": 128,
+            "effective_input_tokens": null,
+            "context_state": "unverified"
+          },
+          "pricing": {
+            "currency": "USD",
+            "prompt_per_million_tokens": null,
+            "completion_per_million_tokens": null,
+            "verified": false,
+            "source": "synthetic fixture",
+            "effective_date": "2026-11-01"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+name: Provider integration request
+description: Request support for a new endpoint or deployment.
+labels: [provider]
+body:
+  - type: textarea
+    id: endpoint
+    attributes:
+      label: Endpoint details
+      description: URL, protocol, region/deployment, served model ID, and revision if known. Do not include API keys.
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Capabilities and limits
+      description: Streaming, tools, JSON/schema output, reasoning controls, cache controls, advertised context/output, and rate limits.
+  - type: textarea
+    id: pricing
+    attributes:
+      label: Pricing
+      description: Dated source and units. Do not claim verified pricing without a source.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Documentation, `/models` output, or sanitized probes. Clearly distinguish claims from observations.
