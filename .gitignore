@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+# Pinned AIPerf engine environment; see docs/decisions/0002-architecture-and-aiperf-verification.md
+.venv-aiperf/
 .env
 .env.*
 !.env.example

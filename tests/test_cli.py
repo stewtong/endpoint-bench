@@ -40,12 +40,22 @@ def test_run_requires_one_mode(capsys: pytest.CaptureFixture[str]) -> None:
     assert "one of the arguments" in capsys.readouterr().err
 
 
-def test_execute_fails_closed(capsys: pytest.CaptureFixture[str]) -> None:
-    with pytest.raises(SystemExit) as exc_info:
-        main(["run", "--target", "offline-mock-smoke", "--execute"])
+def test_execute_fails_closed_without_ceilings(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = main(["run", "--target", "offline-mock-smoke", "--execute"])
 
-    assert exc_info.value.code == 2
-    assert "live execution is not implemented" in capsys.readouterr().err
+    assert exit_code == 2
+    assert "requires --max-requests" in capsys.readouterr().err
+
+
+def test_execute_rejects_request_ceiling_above_profile(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        ["run", "--target", "offline-mock-smoke", "--execute", "--max-requests", "999"]
+    )
+
+    assert exit_code == 2
+    assert "exceeds the profile" in capsys.readouterr().err
 
 
 def test_unknown_target_fails(capsys: pytest.CaptureFixture[str]) -> None:
@@ -61,12 +71,25 @@ def test_profile_name_mismatch_fails(capsys: pytest.CaptureFixture[str]) -> None
             "offline-mock-smoke",
             "--profile",
             "standard",
+            "--profile-file",
+            "configs/profiles/smoke.json",
             "--dry-run",
         ]
     )
 
     assert exit_code == 2
     assert "does not match requested profile" in capsys.readouterr().err
+
+
+def test_profile_families_resolve_by_name(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = main(
+        ["run", "--target", "offline-mock-smoke", "--profile", "quick", "--dry-run"]
+    )
+
+    assert exit_code == 0
+    manifest = json.loads(capsys.readouterr().out)
+    assert manifest["profile"]["name"] == "quick"
+    assert manifest["profile"]["request_count"] == 20
 
 
 def test_profile_file_override(capsys: pytest.CaptureFixture[str]) -> None:

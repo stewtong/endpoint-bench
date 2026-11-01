@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "name": "long-context",
+  "description": "Accepted-versus-demonstrated context probing. Requires explicit authorization and verified tokenized payload sizing.",
+  "request_count": 8,
+  "input_tokens": 131072,
+  "max_output_tokens": 512,
+  "concurrency": 1,
+  "streaming": true,
+  "timeout_s": 600,
+  "qualification": {
+    "status": "provisional",
+    "authorization_required": true,
+    "note": "An HTTP 200 does not qualify effective context. Sentinels are required."
+  }
+}

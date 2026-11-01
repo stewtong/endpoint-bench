@@ -26,22 +26,27 @@ The current implementation is an early, offline-only foundation. It does not yet
 |---|---|
 | Provider registry validation | Implemented |
 | Offline dry-run manifest | Implemented |
+| Normalized trial evidence (lifecycle/outcome/attempts) | Implemented |
+| Local OpenAI-compatible mock provider | Implemented |
+| Streaming conformance probes | Implemented |
+| AIPerf 0.13.0 subprocess integration | Implemented (offline-verified) |
+| Report and comparison commands | Implemented (offline evidence only) |
 | CLI entry point | Implemented |
 | Tests and CI | Implemented |
-| AIPerf integration | Planned |
-| Streaming conformance probes | Planned |
-| Tool-call round-trip probes | Planned |
+| Tool-call round-trip probes | Implemented (offline-verified) |
+| Process deadline and cleanup | Implemented |
+| Numeric-loopback execution guard | Implemented |
 | Cache benchmarks | Planned |
 | Concurrency and stability benchmarks | Planned |
 | Long-context benchmarks | Planned |
 | AA metadata import | Planned |
-| Live endpoint execution | Planned and intentionally disabled |
+| Live paid endpoint execution | Implemented but fail-closed and unauthorized |
 
-There are no benchmark results yet. Do not interpret generated manifests as measured evidence.
+There are no benchmark results yet. Do not interpret generated manifests, probe evidence, or reports as measured endpoint performance. AIPerf integration has been verified only against a local mock, never a live provider.
 
 ## Quickstart
 
-The only verified workflow today is offline:
+The verified workflows are offline (no provider contact).
 
 ```bash
 git clone https://github.com/stewtong/endpoint-bench.git
@@ -59,13 +64,48 @@ This requires Python 3.13. `uv sync` creates an isolated environment; it does no
 
 The dry-run manifest records the resolved target, profile, configuration hashes, planned request/token exposure, and explicit evidence that no request was sent. Cost estimation is intentionally `null` in the example because its synthetic pricing is unverified.
 
-Unknown pricing is allowed for registry validation and dry-run; it is represented as `null`, never as zero. `--execute` fails closed. Live inference has not been implemented.
+Unknown pricing is allowed for registry validation and dry-run; it is represented as `null`, never as zero. `--execute` fails closed without request ceilings, and it refuses non-loopback targets unless `--authorize-live` is given with verified pricing and a cost ceiling. No paid inference has been run.
+
+## Offline conformance evidence
+
+The probe path needs no credentials and no AIPerf installation. Its passing conformance matrix — streaming start, chunks, usage, finish reason, truncation, interruption, timeouts before and after first token, 429/5xx, malformed payloads, and missing usage — runs entirely against a local mock in the test suite:
+
+```bash
+uv run pytest tests/test_conformance.py
+```
+
+The same command works against any configured target:
+
+```bash
+uv run endpoint-bench probe --target <deployment_key> --profile smoke --requests 2
+```
+
+It writes a run directory containing `manifest.json`, `trials.jsonl`, and hashes. Against the checked-in example target this records `client_error` trials, because that mock URL is deliberately unreachable; the resulting evidence documents a transport failure rather than a passing probe. Trial records separate lifecycle from outcome and count HTTP attempts separately from trials.
+
+Full AIPerf integration requires the pinned engine environment, which is not part of `uv sync`:
+
+```bash
+uv venv .venv-aiperf --python 3.13
+VIRTUAL_ENV=.venv-aiperf uv pip install aiperf==0.13.0
+uv run endpoint-bench run --target offline-mock-smoke --profile smoke \
+  --execute --max-requests 2
+uv run endpoint-bench report --run runs/<run_id>
+```
+
+The complete multi-turn tool-call exchange is exercised with:
+
+```bash
+uv run endpoint-bench probe --target <deployment_key> --profile smoke \
+  --scenario tool-round-trip --requests 1
+```
+
+AIPerf 0.13.0 sends `X-Session-Affinity` by default, which can improve cache locality and make an endpoint look faster than it would for an ordinary client. Baseline runs disable it and verify its absence at the receiving server; affinity experiments are separate result identities. See [`docs/decisions/0002-architecture-and-aiperf-verification.md`](docs/decisions/0002-architecture-and-aiperf-verification.md).
 
 ## Configuration
 
 See [`configs/registry.example.json`](configs/registry.example.json). A provider contains a URL, protocol, region, non-secret credential environment-variable name, and one or more deployments. The registry never stores credentials.
 
-Supply credentials only in the environment when live execution is implemented. Do not put them in files, logs, shell history, or process arguments. Current workflows require no credentials.
+Supply credentials only through the environment variable named in the registry. They are injected into generated AIPerf configuration as a `${VAR}` reference, so no secret enters a file, a command line, or an artifact. Offline workflows require no credentials.
 
 ## Benchmark profiles
 

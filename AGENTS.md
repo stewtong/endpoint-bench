@@ -1,6 +1,6 @@
 # Agent instructions — Agent Endpoint Bench
 
-**Version:** 0.5.0
+**Version:** 0.5.1
 **Datestamp:** 2026-11-01
 **Source:** Canonical endpoint benchmark architecture, historical Token Factory evidence, AIPerf 0.13.0 inspection, AA documentation, and the v0.5 public-readiness audit.
 **Update rule:** Keep these instructions aligned with `BENCHMARK_PLAN.md` and `IMPLEMENTATION_TASKS.md`. Preserve historical evidence and methodology history separately.
@@ -49,6 +49,21 @@ The existing Token Factory candidate list is seed configuration only. Never hard
 4. CI must run offline without provider credentials, paid traffic, private files, or the original development machine.
 5. Publish no license until the owner approves it. Until then, do not represent the repository as licensed open-source software. Do not vendor AIPerf or redistribute restricted AA data.
 6. Public examples must be labeled synthetic. Sanitize hostnames, usernames, account identifiers, paths, prompts, responses, and raw provider metadata before export.
+
+## Durable engine-integration invariants
+
+These were established by verified evidence in `docs/decisions/0002-architecture-and-aiperf-verification.md` and are enforced by regression tests. Do not relax them to make a test or a run easier.
+
+1. Credentials never appear on a command line. Use environment-backed configuration references (`${VAR}`), never `--api-key`.
+2. A baseline run disables session affinity and verifies the header's absence at the receiving server. An affinity-enabled run is a separate configuration and a separate result identity; the two are never merged or compared as the same client.
+3. No automatic retries. One trial is one HTTP attempt, and attempts are counted separately from trials.
+4. Every actual HTTP request is accounted for, including readiness probes and warmups when they are deliberately enabled.
+5. Per-request timeouts and an overall process deadline are always explicit. Termination signals the whole process group, escalates to SIGKILL when any member survives, and records the reason.
+6. A nonzero engine exit with a missing summary export is a benchmark failure, not a harness crash and not a zero-valued result. Preserve partial raw evidence and distinguish the two.
+7. Engine version and result schema are validated before parsing. Unsupported versions are rejected or explicitly quarantined; never parsed optimistically.
+8. Token counts are recorded in four distinct measures (target, client-estimated, provider-reported, observed output). Never apply a correction factor. Unverified sizing blocks token-normalized and long-context claims.
+9. Local unattended execution is restricted to explicit numeric loopback addresses on an explicit port. Hostname resolution is not trusted, proxies are stripped, and redirects are refused.
+10. Workload kinds are labelled and not interchangeable. Recorded replay is never described as live agent execution, and conformance probes never imply intelligence scoring.
 
 ## Before each implementation task
 

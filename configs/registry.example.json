@@ -12,11 +12,25 @@
           "deployment_key": "offline-mock-smoke",
           "model_id": "offline-mock-model",
           "model_revision": "synthetic-2026-11-01",
+          "capabilities": {
+            "streaming": "unverified",
+            "tools": "unverified",
+            "json_output": "unverified",
+            "reasoning": "unknown",
+            "prompt_cache_reporting": "unverified"
+          },
           "context": {
             "advertised_input_tokens": 128,
             "effective_input_tokens": null,
             "context_state": "unverified"
           },
+          "output_limit_tokens": null,
+          "tokenizer": null,
+          "cache": {
+            "reports_cached_tokens": null,
+            "controls": []
+          },
+          "last_verified_at": null,
           "pricing": {
             "currency": "USD",
             "prompt_per_million_tokens": null,

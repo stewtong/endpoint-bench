@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "name": "standard",
+  "description": "Repeated performance and concurrency observations. Provisional; requires temporal coverage before qualification.",
+  "request_count": 200,
+  "input_tokens": 4096,
+  "max_output_tokens": 512,
+  "concurrency": 4,
+  "streaming": true,
+  "timeout_s": 180,
+  "qualification": {
+    "status": "provisional",
+    "minimum_samples": 200,
+    "note": "Insufficient for P95/P99 claims below the stated sample count."
+  }
+}

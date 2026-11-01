@@ -1,7 +1,7 @@
 # Benchmark methodology
 
-**Version:** 0.5.0 — **Datestamp:** 2026-11-01
-**Status:** Design contract for planned measurements. The current repository implements only offline configuration validation and dry-run manifests.
+**Version:** 0.5.1 — **Datestamp:** 2026-11-01
+**Status:** Design contract. The repository implements offline configuration validation, dry-run manifests, normalized trial evidence, deterministic conformance probes, and a pinned AIPerf 0.13.0 wrapper verified against a local mock. No live endpoint has been measured.
 
 ## Measurement scope
 
@@ -29,6 +29,22 @@ A published comparison must identify:
 - account/authorization tier only at the granularity needed to interpret limits.
 
 Deployment keys distinguish provider, endpoint, model revision, protocol, and relevant serving settings. A comparison across providers is an infrastructure comparison only when model revision and decisive settings are confirmed equivalent; otherwise it is a model-endpoint configuration comparison.
+
+## Client profiles and session affinity
+
+Every run records an explicit client profile. A client profile is part of the experiment identity, not an incidental detail: changing it changes the measurement.
+
+AIPerf 0.13.0 sends `X-Session-Affinity` carrying a stable per-session identifier on every request **by default**. A router or serving stack may use that header to pin a session to one replica, improving KV-cache locality. An endpoint measured that way can appear faster than the same endpoint measured by an ordinary client.
+
+Therefore:
+
+- **Baseline:** the affinity header is explicitly disabled, and its absence is verified at the receiving server rather than inferred from configuration.
+- **Affinity experiment:** a separate configuration and a separate result identity, labeled as such.
+- The two are never merged, averaged, or compared as if they were the same client.
+
+`X-Correlation-ID` is always present and is recorded as part of the client profile, because a provider may treat it as a routing key.
+
+Other recorded client effects include connection-reuse strategy, per-request timeout, tokenizer, request batching, prompt normalization, and whether readiness or warmup traffic was issued. Every actual HTTP request is accounted for, including probes and warmups when they are deliberately enabled. The harness does not retry inference requests implicitly, so one trial corresponds to one HTTP attempt.
 
 ## Latency definitions
 
@@ -103,6 +119,25 @@ Separate:
 - unknown provider transformation.
 
 Escalate only after serialized/tokenized size and output headroom are verified. Sentinel placement can reveal partial access, but a sentinel failure does not uniquely prove server truncation; model behavior and infrastructure behavior remain distinguishable. HTTP 200 does not qualify an advertised context.
+
+## Token accounting and workload verification
+
+Four token measures are retained separately and never collapsed:
+
+1. **Target** — the workload size the profile requested.
+2. **Client-estimated** — what the client tokenizer counted in the serialized request.
+3. **Provider-reported** — what the provider returned in `usage`.
+4. **Observed output** — what the client counted in the response.
+
+A purported workload size is not evidence of a delivered workload. When the client estimate and the provider report differ beyond a profile-defined tolerance, workload sizing is unverified and token-normalized performance and long-context claims are withheld. Missing provider telemetry is unverifiable, which is not a pass.
+
+No correction factor is ever applied to a reported count. If the numbers disagree, the run is reported as disagreeing.
+
+The built-in offline tokenizer is appropriate for functional and protocol tests. It is not authoritative for a hosted model, whose own accounting may differ.
+
+## Failure attribution
+
+A failed exchange is attributed to exactly one of `provider`, `model`, `harness`, or `unknown`. A model that declines to call a required tool is a `model` outcome: a protocol-shaped failure caused by model choice, not infrastructure. Attribution is recorded per trial so aggregate failure counts do not silently imply provider fault.
 
 ## Statistics
 

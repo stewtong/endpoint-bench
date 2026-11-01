@@ -1,6 +1,6 @@
 # Implementation tasks — Agent Endpoint Bench v0.5
 
-**Version:** 0.5.0
+**Version:** 0.5.1
 **Datestamp:** 2026-11-01  
 **Source:** `AGENTS.md` and canonical `BENCHMARK_PLAN.md` v0.5.0.
 **Status:** Approved execution checklist; not evidence of completed benchmark runs.  
@@ -20,7 +20,7 @@ This is the execution checklist for coding agents working in this repository. Th
 - Inspect AIPerf session-affinity behavior, default headers, retries, connection reuse, timeouts, request batching, prompt normalization, tokenization, conversation serialization, and cache-control effects.
 - Review provider registry assumptions and current six Token Factory candidates as unverified configuration.
 - Verify AA documentation, endpoint definitions, pagination, Free/Pro tiers, quotas, and applicable data-rights constraints.
-- Record architecture decisions, verified assumptions, unknowns, limitations, and first milestone in `docs/decisions/0001-architecture.md`.
+- Record architecture decisions, verified assumptions, unknowns, limitations, and first milestone in `docs/decisions/0002-architecture-and-aiperf-verification.md`.
 
 **Exit criteria**
 
@@ -28,6 +28,8 @@ This is the execution checklist for coding agents working in this repository. Th
 - CLI choices are validated or explicitly deferred with limitations.
 - No paid calls are made.
 - Offline testing is possible.
+
+**Status (2026-11-01): Gate 0 exit met.** AIPerf 0.13.0 was installed from the PyPI wheel (tag `v0.13.0` equals the pinned commit `794f8bb`), driven entirely offline against a local OpenAI-compatible mock, and recorded in `docs/decisions/0002-architecture-and-aiperf-verification.md`. Key verified facts: the benchmark command is `aiperf profile` (not `run`); credentials work through YAML `${VAR}` substitution with no secret in argv or artifacts; `X-Session-Affinity` is sent by default and must be disabled for a normal-client baseline; there are no automatic request retries; a total-failure run exits non-zero without writing the summary export.
 
 ## Gate 1 — Offline foundation
 
@@ -54,6 +56,8 @@ This is the execution checklist for coding agents working in this repository. Th
 - Malformed configs, unsupported protocols, invalid targets, and invalid budgets fail loudly. Unknown pricing remains explicit in offline dry-run and blocks unattended live execution.
 - No Token Factory/Nebius behavior is hard-coded in core orchestration.
 - Dry-run makes no inference requests.
+
+**Status (2026-11-01): Gate 1 exit met, with AA deferred by owner decision.** Delivered: extended registry schema (capability states, output limit, tokenizer, cache controls, last-verified); five profile families with explicit timeouts and provisional qualification metadata; lifecycle/outcome trial model with separate planned/started/transport/protocol/success/failure/skip/cancel counters and HTTP attempts; in-process OpenAI-compatible mock provider plus deterministic hashable fixture generator; normalized trial JSONL with sanitized logs; `probe`, `report`, and `compare` workflows. Two deliberate exceptions: the initial offline AA parser was deferred to Gate 5 by owner decision, and `report`/`compare` operate on produced evidence rather than a committed synthetic example (still open under Gate 6).
 
 ## Gate 2 — AIPerf and protocol integration
 
@@ -87,6 +91,22 @@ This is the execution checklist for coding agents working in this repository. Th
 - AIPerf metrics and custom probe results preserve provenance and unit metadata.
 - Live-turn conformance contract is implemented and tested offline.
 - Live smoke remains blocked pending explicit authorization.
+
+**Status (2026-11-01): Gate 2 exit met for offline evidence.** Delivered and verified against the pinned engine and a local mock:
+
+- AIPerf 0.13.0 subprocess wrapper: deterministic YAML generation, environment-only credential injection, explicit client profiles, per-request timeout plus process deadline, SIGTERM-then-SIGKILL process-group termination with orphan-worker detection, sanitized stdout/stderr, raw artifact preservation, and version-checked parsing that rejects unsupported schema.
+- Explicit controls and metadata for session affinity, default headers, connection reuse, timeout, tokenization, prompt normalization, and cache controls where AIPerf exposes them. Baseline and affinity-enabled runs are separate result identities.
+- Live-turn tool-call round-trip probe: fixed schema, fragmented streamed arguments, ordered reassembly, identifier and JSON and argument-type validation, synthetic tool result keyed to the correct call id, full-history resubmission, and required terminated continuation. Variants covered offline: multiple calls, missing and inconsistent call ids, invalid JSON, interrupted tool streams, absent tool calls attributed to the model, large tool observations, streaming and non-streaming, malformed and timed-out continuations.
+- Attribution separating provider/protocol failure from model semantic behavior.
+- Cost preflight guards with unknown-pricing fail-closed behavior, numeric-loopback-only local execution, proxy stripping, and redirect refusal.
+- Normalized evidence with four distinct token measures, per-trial attribution, workload-type labelling, and planned-versus-actual request reconciliation.
+- Offline regression tests encoding all ten integration invariants from `docs/decisions/0002-architecture-and-aiperf-verification.md`.
+
+Remaining gaps, stated rather than implied:
+
+- Trace-replay provenance labelling exists as a workload enum and report label, but no replay dataset has been executed through the harness.
+- The raw-to-normalized demonstration runs through the AIPerf wrapper and through the independent probe client as separate evidence streams; there is no single AIPerf-produced tool-call run.
+- Live endpoint behaviour, including whether a provider honours affinity headers, is unverified. Live smoke remains blocked pending explicit authorization.
 
 ## Gate 3 — Standard performance profiles
 

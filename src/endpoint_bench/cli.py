@@ -1,13 +1,46 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
+from . import RESULT_SCHEMA_VERSION, __version__
+from .aiperf import (
+    BASELINE_CLIENT,
+    AiperfError,
+    build_benchmark_config,
+    dump_yaml,
+    parse_artifacts,
+    run_aiperf,
+    write_config,
+)
 from .dry_run import build_dry_run_manifest
+from .fixtures import generate_fixture
+from .network_guard import NetworkGuardError, assert_loopback, is_loopback
+from .probes import ProbeConfig, probe, probe_tool_round_trip
 from .profiles import ProfileError, load_profile
-from .registry import RegistryError, load_registry
+from .registry import Deployment, RegistryError, load_registry
+from .report import (
+    ReportError,
+    build_provenance,
+    build_report,
+    compare_reports,
+    load_report,
+    write_report,
+)
+from .trials import (
+    WORKLOAD_LIVE_TURN_CONFORMANCE,
+    WORKLOAD_SYNTHETIC_SINGLE_TURN,
+    Trial,
+    count_trials,
+    token_sizing_summary,
+    write_trials_jsonl,
+)
+
+DEFAULT_AIPERF = Path(".venv-aiperf/bin/aiperf")
 
 
 def _json_print(value: object) -> None:
@@ -19,34 +52,139 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="endpoint-bench",
         description=(
-            "Validate provider configuration and create offline dry-run manifests. "
-            "Live inference is not implemented."
+            "Validate provider configuration, run offline conformance probes, and "
+            "orchestrate pinned AIPerf runs. Live paid inference is fail-closed."
         ),
     )
-    parser.add_argument("--version", action="version", version="endpoint-bench 0.0.1")
+    parser.add_argument("--version", action="version", version=f"endpoint-bench {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    validate = subparsers.add_parser("registry", help="registry operations")
-    validate_subparsers = validate.add_subparsers(dest="registry_command", required=True)
-    validate_registry = validate_subparsers.add_parser(
-        "validate", help="validate a provider registry"
+    registry = subparsers.add_parser("registry", help="registry operations")
+    registry_subparsers = registry.add_subparsers(dest="registry_command", required=True)
+    validate_registry = registry_subparsers.add_parser("validate", help="validate a provider registry")
+    validate_registry.add_argument("--config", type=Path, default=Path("configs/registry.example.json"))
+
+    probe_parser = subparsers.add_parser("probe", help="run deterministic conformance probes")
+    _add_target_options(probe_parser)
+    probe_parser.add_argument("--requests", type=int, default=1)
+    probe_parser.add_argument(
+        "--scenario",
+        choices=("streaming", "tool-round-trip"),
+        default="streaming",
+        help="conformance scenario to exercise",
     )
-    validate_registry.add_argument(
-        "--config", type=Path, default=Path("configs/registry.example.json")
+    probe_parser.add_argument(
+        "--run-dir", type=Path, default=Path("runs"), help="parent directory for run artifacts"
     )
 
-    run = subparsers.add_parser("run", help="resolve a run and produce a dry-run manifest")
-    run.add_argument("--config", type=Path, default=Path("configs/registry.example.json"))
-    run.add_argument(
-        "--profile-file", type=Path, default=Path("configs/profiles/smoke.json")
+    run_parser = subparsers.add_parser("run", help="resolve a run and produce evidence")
+    _add_target_options(run_parser)
+    run_parser.add_argument(
+        "--aiperf",
+        type=Path,
+        default=Path(os.environ.get("ENDPOINT_BENCH_AIPERF", DEFAULT_AIPERF)),
+        help="pinned AIPerf executable",
     )
-    run.add_argument("--target", required=True)
-    run.add_argument("--profile", help="expected profile name")
-    modes = run.add_mutually_exclusive_group(required=True)
+    run_parser.add_argument("--max-requests", type=int, default=None)
+    run_parser.add_argument("--max-usd", type=float, default=None)
+    run_parser.add_argument("--process-timeout", type=float, default=900.0)
+    run_parser.add_argument(
+        "--authorize-live",
+        action="store_true",
+        help="explicit authorization for non-loopback inference traffic",
+    )
+    run_parser.add_argument("--run-dir", type=Path, default=Path("runs"))
+    _add_mode_group(run_parser)
+
+    report_parser = subparsers.add_parser("report", help="build a report from a completed run")
+    report_parser.add_argument("--run", type=Path, required=True, help="run directory")
+
+    compare_parser = subparsers.add_parser("compare", help="compare two completed runs")
+    compare_parser.add_argument("--baseline", type=Path, required=True)
+    compare_parser.add_argument("--candidate", type=Path, required=True)
+
+    return parser
+
+
+def _add_target_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--config", type=Path, default=Path("configs/registry.example.json"))
+    parser.add_argument("--profile-file", type=Path, default=None)
+    parser.add_argument("--target", required=True)
+    parser.add_argument("--profile", default="smoke")
+
+
+def _add_mode_group(parser: argparse.ArgumentParser) -> None:
+    modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--dry-run", action="store_true")
     modes.add_argument("--execute", action="store_true")
 
-    return parser
+
+def _resolve_profile_path(profile_file: Path | None, profile_name: str) -> Path:
+    if profile_file is not None:
+        return profile_file
+    return Path("configs") / "profiles" / f"{profile_name}.json"
+
+
+def _resolve_target(registry, target: str) -> Deployment:
+    if target not in registry.deployments:
+        available = ", ".join(sorted(registry.deployments)) or "none"
+        raise RegistryError(f"unknown target `{target}`; available targets: {available}")
+    return registry.deployments[target]
+
+
+def _credential_env(deployment: Deployment) -> tuple[dict[str, str], list[str]]:
+    """Read a credential from the environment only. Never from files or argv."""
+    value = os.environ.get(deployment.credential_env_name)
+    if not value:
+        return {}, [f"credential environment variable {deployment.credential_env_name} not set"]
+    return {deployment.credential_env_name: value}, []
+
+
+def _execute_guard(deployment: Deployment, args: argparse.Namespace, planned: int) -> list[str]:
+    """Return blocking reasons for live execution. Empty means allowed.
+
+    A local target must be a numeric loopback address on an explicit port.
+    Hostname resolution is not trusted, so `localhost` and anything that merely
+    resolves to loopback is rejected for unattended execution.
+    """
+    blockers: list[str] = []
+    loopback = is_loopback(deployment.base_url)
+
+    if loopback:
+        try:
+            assert_loopback(deployment.base_url)
+        except NetworkGuardError as error:
+            blockers.append(f"local target rejected: {error}")
+    elif not args.authorize_live:
+        blockers.append(
+            f"target `{deployment.deployment_key}` is not loopback; live inference requires "
+            "--authorize-live"
+        )
+    if not loopback:
+        if deployment.pricing.get("verified") is not True:
+            blockers.append(
+                "pricing is unverified; unattended live execution is blocked because cost "
+                "cannot be conservatively bounded"
+            )
+        if args.max_usd is None:
+            blockers.append("live execution requires --max-usd")
+    if args.max_requests is None:
+        blockers.append("execution requires --max-requests")
+    elif args.max_requests <= 0:
+        blockers.append("--max-requests must be positive")
+    elif args.max_requests > planned:
+        blockers.append(
+            f"--max-requests {args.max_requests} exceeds the profile's planned {planned} requests"
+        )
+    return blockers
+
+
+def _run_directory(parent: Path, run_id: str) -> Path:
+    path = parent / run_id
+    if path.exists():
+        raise AiperfError(f"run directory already exists: {path}; runs are immutable")
+    path.mkdir(parents=True)
+    return path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -66,23 +204,222 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
 
-        if arguments.execute:
-            parser.error("live execution is not implemented; use --dry-run")
+        if arguments.command == "probe":
+            return _command_probe(arguments)
 
-        registry = load_registry(arguments.config)
-        if arguments.target not in registry.deployments:
-            available = ", ".join(sorted(registry.deployments)) or "none"
-            raise RegistryError(
-                f"unknown target `{arguments.target}`; available targets: {available}"
-            )
-        profile = load_profile(arguments.profile_file, arguments.profile)
-        deployment = registry.deployments[arguments.target]
-        manifest = build_dry_run_manifest(registry, deployment, profile)
-        _json_print(manifest)
-        return 0
-    except (RegistryError, ProfileError) as error:
+        if arguments.command == "run":
+            return _command_run(arguments, parser)
+
+        if arguments.command == "report":
+            return _command_report(arguments)
+
+        if arguments.command == "compare":
+            return _command_compare(arguments)
+
+        parser.error(f"unhandled command `{arguments.command}`")
+    except (RegistryError, ProfileError, AiperfError, ReportError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
+    return 0
+
+
+def _command_probe(arguments: argparse.Namespace) -> int:
+    registry = load_registry(arguments.config)
+    deployment = _resolve_target(registry, arguments.target)
+    profile = load_profile(_resolve_profile_path(arguments.profile_file, arguments.profile), arguments.profile)
+    secrets, warnings = _credential_env(deployment)
+
+    fixture = generate_fixture(count=arguments.requests, target_tokens=profile.input_tokens)
+    config = ProbeConfig(
+        base_url=deployment.base_url,
+        model_id=deployment.model_id,
+        timeout_s=profile.timeout_s,
+        max_output_tokens=profile.max_output_tokens,
+        streaming=profile.streaming,
+    )
+    api_key = secrets.get(deployment.credential_env_name)
+
+    if not is_loopback(deployment.base_url):
+        raise AiperfError(
+            "probe only runs against explicit numeric loopback targets; "
+            f"`{deployment.base_url}` is not one. Use the authorized live workflow instead."
+        )
+    if api_key:
+        raise AiperfError(
+            "probe refuses to transmit a credential; conformance probes use an "
+            "unauthenticated local mock"
+        )
+
+    trials: list[Trial] = []
+    for index in range(arguments.requests):
+        trial = Trial(
+            trial_id=f"probe-{index:04d}",
+            deployment_key=deployment.deployment_key,
+            profile_name=profile.name,
+        )
+        if arguments.scenario == "tool-round-trip":
+            probe_tool_round_trip(
+                config, api_key=api_key, prompt=fixture.prompts[index].text, trial=trial
+            )
+        else:
+            probe(config, api_key=api_key, prompt=fixture.prompts[index].text, trial=trial)
+        trials.append(trial)
+
+    run_dir = _run_directory(arguments.run_dir, f"probe-{fixture.sha256[:12]}")
+    trials_path = run_dir / "trials.jsonl"
+    trials_sha = write_trials_jsonl(trials_path, trials)
+    manifest = {
+        "schema_version": RESULT_SCHEMA_VERSION,
+        "manifest_type": "probe",
+        "software": {"name": "endpoint-bench", "version": __version__},
+        "deployment_key": deployment.deployment_key,
+        "profile": profile.name,
+        "fixture": {"name": fixture.name, "version": fixture.version, "sha256": fixture.sha256},
+        "workload_type": WORKLOAD_LIVE_TURN_CONFORMANCE,
+        "scenario": arguments.scenario,
+        "counters": count_trials(trials).to_dict(),
+        "token_accounting": token_sizing_summary(trials),
+        "trials_path": str(trials_path),
+        "trials_sha256": trials_sha,
+        "warnings": warnings,
+    }
+    (run_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    _json_print(manifest)
+    return 0
+
+
+def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    registry = load_registry(arguments.config)
+    deployment = _resolve_target(registry, arguments.target)
+    profile = load_profile(
+        _resolve_profile_path(arguments.profile_file, arguments.profile), arguments.profile
+    )
+
+    if arguments.dry_run:
+        _json_print(build_dry_run_manifest(registry, deployment, profile))
+        return 0
+
+    blockers = _execute_guard(deployment, arguments, profile.request_count)
+    if blockers:
+        for reason in blockers:
+            print(f"error: {reason}", file=sys.stderr)
+        return 2
+
+    client = BASELINE_CLIENT
+    secrets, warnings = _credential_env(deployment)
+    if not secrets and deployment.credential_env_name:
+        print(
+            f"warning: {deployment.credential_env_name} is not set; "
+            "the endpoint will be called without credentials",
+            file=sys.stderr,
+        )
+
+    config = build_benchmark_config(
+        model_id=deployment.model_id,
+        base_url=deployment.base_url,
+        client=client,
+        requests=profile.request_count,
+        concurrency=profile.concurrency,
+        input_tokens=profile.input_tokens,
+        output_tokens=profile.max_output_tokens,
+        artifact_dir=Path("pending"),
+        credential_env_name=deployment.credential_env_name or None,
+        streaming=profile.streaming,
+        capture_raw=False,
+    )
+    preview_sha = hashlib.sha256(dump_yaml(config).encode("utf-8")).hexdigest()
+    run_id = f"run-{preview_sha[:12]}"
+    run_dir = _run_directory(arguments.run_dir, run_id)
+
+    config["benchmark"]["artifacts"]["dir"] = str(run_dir / "aiperf")
+    config_path = run_dir / "aiperf-config.yaml"
+    config_sha = write_config(config_path, config)
+
+    run = run_aiperf(
+        executable=str(arguments.aiperf),
+        config_path=config_path,
+        artifact_dir=run_dir / "aiperf",
+        client=client,
+        secrets=secrets,
+        process_timeout_s=arguments.process_timeout,
+        config_sha256=config_sha,
+        target_url=deployment.base_url,
+    )
+
+    if not run.completed and not (run_dir / "aiperf").exists():
+        raise AiperfError(
+            f"AIPerf failed before producing artifacts (exit {run.exit_code}); "
+            f"see {run.stderr_path}"
+        )
+
+    results = parse_artifacts(
+        run_dir / "aiperf",
+        deployment_key=deployment.deployment_key,
+        profile_name=profile.name,
+        target_input_tokens=profile.input_tokens,
+        token_tolerance_pct=profile.token_tolerance_pct,
+    )
+    trials_sha = write_trials_jsonl(run_dir / "trials.jsonl", results.trials)
+    provenance = build_provenance(
+        deployment=deployment,
+        profile=profile,
+        client=client,
+        results=results,
+        workload_type=WORKLOAD_SYNTHETIC_SINGLE_TURN,
+        run_dir=run_dir,
+        run=run,
+        config_path=config_path,
+        config_sha256=config_sha,
+        trials_path=run_dir / "trials.jsonl",
+        artifact_dir=run_dir / "aiperf",
+        process_deadline_s=arguments.process_timeout,
+    )
+    report = build_report(
+        run_id=run_id,
+        deployment_key=deployment.deployment_key,
+        profile_name=profile.name,
+        client_profile=client,
+        results=results,
+        trials=results.trials,
+        provenance=provenance,
+    )
+    report["run"] = run.to_dict()
+    report["trials_sha256"] = trials_sha
+    report["warnings"] = warnings
+    write_report(run_dir / "report.json", report)
+
+    _json_print(
+        {
+            "run_id": run_id,
+            "run_dir": str(run_dir),
+            "exit_code": run.exit_code,
+            "timed_out": run.timed_out,
+            "counters": results.counters.to_dict(),
+            "benchmark_failed": results.benchmark_failed,
+            "report_path": str(run_dir / "report.json"),
+        }
+    )
+    return 0 if not results.benchmark_failed else 1
+
+
+def _command_report(arguments: argparse.Namespace) -> int:
+    run_dir = arguments.run
+    if not run_dir.is_dir():
+        raise ReportError(f"run directory does not exist: {run_dir}")
+    report_path = run_dir / "report.json"
+    if report_path.is_file():
+        _json_print(load_report(report_path))
+        return 0
+    raise ReportError(f"no report.json in {run_dir}; run `endpoint-bench run` or `probe` first")
+
+
+def _command_compare(arguments: argparse.Namespace) -> int:
+    baseline = load_report(arguments.baseline / "report.json")
+    candidate = load_report(arguments.candidate / "report.json")
+    _json_print(compare_reports(baseline, candidate))
+    return 0
 
 
 if __name__ == "__main__":
