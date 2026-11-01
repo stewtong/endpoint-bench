@@ -1,0 +1,25 @@
+name: Bug report
+description: Report something that does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Exact commands, commit, operating system, Python version, and relevant output. Remove credentials and sensitive prompts/responses.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Include test output or a sanitized manifest/report. Do not paste credentials or private data.
+    validations:
+      required: true

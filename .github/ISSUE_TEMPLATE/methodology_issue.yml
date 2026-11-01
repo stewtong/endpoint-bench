@@ -1,0 +1,23 @@
+name: Methodology issue
+description: Report a benchmark validity, statistics, schema, or interpretation concern.
+labels: [methodology]
+body:
+  - type: textarea
+    id: concern
+    attributes:
+      label: Concern
+      description: What result might be misleading or non-reproducible?
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Validity impact
+      description: How could this affect latency, throughput, reliability, cache, context, or qualification conclusions?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed correction
+      description: Suggest a measurement, control, documentation change, or schema change.

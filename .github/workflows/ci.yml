@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.13'
+      - name: Install pinned uv
+        run: python -m pip install uv==0.11.14
+      - name: Install locked dependencies
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check .
+      - name: Test
+        run: uv run pytest
+      - name: Validate example registry
+        run: uv run endpoint-bench registry validate
+      - name: Validate offline dry-run
+        run: |
+          uv run endpoint-bench run \
+            --target offline-mock-smoke \
+            --profile smoke \
+            --dry-run > /tmp/endpoint-bench-dry-run.json
+          uv run python -c 'import json; m=json.load(open("/tmp/endpoint-bench-dry-run.json")); assert m["inference"]["network_requests"] == 0'

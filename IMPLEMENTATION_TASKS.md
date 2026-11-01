@@ -1,102 +1,211 @@
-# Implementation tasks — Agent Endpoint Bench v0.3
+# Implementation tasks — Agent Endpoint Bench v0.5
 
-**Version:** 0.3.0  
+**Version:** 0.5.0
 **Datestamp:** 2026-11-01  
-**Source:** `AGENTS.md`, canonical `BENCHMARK_PLAN.md` v0.3.0, repository inspection, AIPerf 0.13.0, and Artificial Analysis documentation.  
+**Source:** `AGENTS.md` and canonical `BENCHMARK_PLAN.md` v0.5.0.
 **Status:** Approved execution checklist; not evidence of completed benchmark runs.  
-**Update rule:** Keep gates aligned with the canonical plan and preserve historical evidence separately.
+**Update rule:** Keep gate deliverables, prerequisites, exits, and safety rules aligned with the canonical plan. Preserve historical evidence separately.
 
-This is the execution checklist for a coding agent working in the actual project repository. **The markdown artifacts describe work to perform; they do not imply that an AIPerf harness or AA importer has been implemented.** Read `AGENTS.md` for execution/safety rules and `BENCHMARK_PLAN.md` for methodology.
+This is the execution checklist for coding agents working in this repository. The Markdown artifacts describe work to perform; they do not imply that an AIPerf harness, conformance layer, or AA importer has been implemented.
 
-## Gate 0 — Local survey and integration contract
+## Gate 0 — Repository survey and verified architecture
 
-- [ ] Inventory current files, `tf_bench.py` and OpenClaw runner (if present), dependency managers, existing results, credentials by **env-var name only**; do not overwrite anything.
-- [ ] Use the existing `agent_setups/tf-benchmark` directory as the dedicated project root; do not create a separate clone/worktree unless the user explicitly requests one. Isolate dependencies with `uv`/venv and do not touch launchd services.
-- [ ] Pin AIPerf 0.13.0, commit `794f8bb75f8582f22e412d7e650fc71ca2a3d21a`, in a Python 3.13 environment. Check installed help/API for multi-turn traces, Mooncake/agentic-code replay, metrics export, caching, TTFO, load generation, config validation, and authentication/URL configuration. Document missing support and supported workarounds.
-- [ ] Confirm current AA `/language/models/free` and `/language/models` schema/tier and applicable data rights from official docs; treat live AA sync as separately authorized and never ask for the actual key in source/chat.
-- [ ] Preserve OpenClaw as separate prior/optional framework evidence; defer framework integration until the direct-API v0.3 core is complete.
-- [ ] Record architectural decision and first milestone in `docs/decisions/0001-architecture.md`.
+**Prerequisites:** Approved plan; access to repository and local tooling; no paid API calls.
 
-**Exit:** Version and limitations documented, CLI choices validated, no paid requests, tests can run offline.
+**Deliverables**
 
-## Gate 1 — Safe, offline MVP
+- Inventory current files, scripts, fixtures, dependency managers, historical results, and credential environment-variable names without exposing or overwriting anything.
+- Preserve optional external Token Factory evidence as historical observations; do not pool it with new trials or make a clean clone depend on it.
+- Verify AIPerf 0.13.0, commit `794f8bb75f8582f22e412d7e650fc71ca2a3d21a`, Python requirements, CLI behavior, metric exports, trace replay, session affinity, configuration, credential handling, and limitations.
+- Inspect AIPerf session-affinity behavior, default headers, retries, connection reuse, timeouts, request batching, prompt normalization, tokenization, conversation serialization, and cache-control effects.
+- Review provider registry assumptions and current six Token Factory candidates as unverified configuration.
+- Verify AA documentation, endpoint definitions, pagination, Free/Pro tiers, quotas, and applicable data-rights constraints.
+- Record architecture decisions, verified assumptions, unknowns, limitations, and first milestone in `docs/decisions/0001-architecture.md`.
 
-- [ ] Define typed YAML schemas: deployment registry, model identity, feature flags, profile workload, budgets, AA mapping.
-- [ ] Seed original six Token Factory rows as unverified configs; add a second provider sample via config only.
-- [ ] Implement immutable run manifest, sanitized trial schema and error taxonomy; add JSONL serialization and deterministic fixture hashing.
-- [ ] Implement CLI `registry validate`, `run --dry-run`, `probe --dry-run`, `report --run` for offline fixture data. Dry-run must generate *zero* inference traffic.
-- [ ] Write offline conformance-response fixtures and parser/metric unit tests.
-- [ ] Add CLI smoke in CI/test pipeline without secrets or network.
+**Exit criteria**
 
-**Exit:** Run manifest can be produced and validated offline, malformed configs fail loudly, no hard-coded Token Factory behavior.
+- Architecture and dependency assumptions are verified from installed/source evidence.
+- CLI choices are validated or explicitly deferred with limitations.
+- No paid calls are made.
+- Offline testing is possible.
 
-## Gate 2 — AIPerf integration and minimal API probes
+## Gate 1 — Offline foundation
 
-- [ ] Implement a pinned-version AIPerf wrapper in the Python 3.13 environment, including CLI builder, process exit/timeout capture, stdout/stderr sanitization, and results parser. Preserve raw AIPerf artifacts. Keep this runner separate from the Python 3.14 legacy venv.
-- [ ] Treat the existing `run_guidellm.sh` as unsafe reference material because it exposes the API key in argv. GuideLLM may remain optional only after environment-only credential handling is verified.
-- [ ] Verify *actual* AIPerf trace behavior (recorded request replay vs live follow-up) and document in report metadata.
-- [ ] Implement standalone OpenAI-compatible direct API conformance probes: streaming, valid termination, usage, tool-call message + streamed argument assembly, JSON/schema output, long observation, controlled reasoning configurations; add alternate provider adapters only when necessary.
-- [ ] Support no-credentials/missing permissions, 429/5xx/timeouts, errors before/after first token, interruption and cost-unknown states.
-- [ ] Run offline mocked integration tests. For **live one-target smoke**, first show manifest/cost cap and request explicit authorization (do not silently proceed).
+**Prerequisites:** Gate 0 exit.
 
-**Exit:** Demonstrable end-to-end raw→normalized result on an offline fixture; live smoke only after authorization.
+**Deliverables**
 
-## Gate 3 — Performance profiles and analysis
+- Typed provider/model registry schema, including endpoint, protocol, revision, region, capabilities, context, output limits, tokenizer, pricing metadata, auth env name, cache controls, and last-verified timestamp.
+- Typed benchmark profile schema for smoke, quick, standard, long-context, reliability, and feature profiles.
+- Trial lifecycle/outcome schema separating planned/started/transport/protocol/skipped/cancelled states from success/failure outcomes.
+- Separate counters for planned trials, started trials, successfully completed trials, and underlying HTTP attempts.
+- Immutable run manifests with UTC timestamps, versions, target fingerprints, fixture/config hashes, budgets, and client metadata.
+- Safe `--dry-run` that creates zero inference traffic, validates schemas, resolves target/profile configuration, estimates exposure, and emits an inspectable manifest.
+- CLI skeleton for `endpoint-bench registry validate`, `endpoint-bench probe`, `endpoint-bench run`, `endpoint-bench report`, and `endpoint-bench compare`.
+- Local OpenAI-compatible mock provider and deterministic fixture generator.
+- Normalized trial JSONL/Parquet serialization with sanitized logs and missing fields represented as unknown/null.
+- Deterministic report generation and reproducible hash comparison.
+- Initial AA parser, mapper, and snapshot-validator fixtures using mocked Free/Pro responses only.
+- Unit/integration tests and CI pipeline that do not require credentials or network access.
 
-- [ ] Define immutable smoke/quick/standard profiles and realistic traffic fixtures (coding repository, test logs, research documents, structured file workflows, tools), with synthetic/approved trace provenance.
-- [ ] Implement randomized/interleaved run order; record client host, region, time window, offered load and concurrency.
-- [ ] Implement 1K/10K/32K/100K profiles, C=1/2/4/8 bounded sweeps, warm-prefix/growing-history/interleaved-session cache scenarios.
-- [ ] Distinguish latency to first streamed byte/token, first answer token, and end-to-end; preserve denominators and actual token counts. Provide confidence/sample counts; do not publish unjustified P99.
-- [ ] Generate report: measured endpoints, workload shapes, supported/unknown features, error distributions, limit onset, cache reported vs inferred benefit, provider-independent versus cross-model comparisons.
+**Exit criteria**
 
-**Exit:** Repeatable standard profile; new endpoint added without modifying benchmark core; no intelligence scoring.
+- A valid offline manifest and normalized trial evidence can be produced end-to-end from fixtures.
+- Malformed configs, unsupported protocols, invalid targets, and invalid budgets fail loudly. Unknown pricing remains explicit in offline dry-run and blocks unattended live execution.
+- No Token Factory/Nebius behavior is hard-coded in core orchestration.
+- Dry-run makes no inference requests.
 
-## Gate 4 — Long-context and reliability qualification (OPTIONAL; separately authorized)
+## Gate 2 — AIPerf and protocol integration
 
-- [ ] Implement context/tokenizer/output-headroom preflight with explicit token count and budget estimates; prove request compaction state is known.
-- [ ] Step 128K→256K→512K→768K→safe ~1M only if supported; mark rejected, truncated, budget-skipped, accepted-but-not-verified separately.
-- [ ] Test multi-turn growth, long synthetic tool logs, stable prefix/cache retention, idle-first differences (avoid claiming genuine server cold-start).
-- [ ] Run bounded multi-window reliability and capacity sweeps; report observed limits from the tested account/region/time, not universal provider SLA.
+**Prerequisites:** Gate 1 exit; pinned AIPerf environment.
 
-**Exit:** Conservative effective context/capacity findings, explicit failure taxonomy and cost evidence, all large-load operations pre-authorized.
+**Deliverables**
 
-## Gate 5 — AA model scores: fetch and preserve locally
+- Pinned-version AIPerf subprocess wrapper with CLI builder, config generation, environment-only credential handling, process/timeout capture, stdout/stderr sanitization, raw artifact preservation, and result parsing.
+- Verified handling of AIPerf schema/version drift and metric units/denominators.
+- Explicit controls and metadata for session affinity, default headers, retries, connection reuse, timeouts, prompt normalization, tokenization, conversation serialization, and cache controls.
+- Separate normal-client baseline and affinity-enabled experiments when supported; never mix client configurations silently.
+- Trace-replay provenance labeling that clearly distinguishes replay from live agent execution.
+- Deterministic streaming conformance probes for stream start, chunks, usage, finish reason, truncation, interruption, timeout before/after first token, and 429/5xx.
+- Deterministic live-turn tool-call round-trip probe:
+  1. fixed request with declared tool schema;
+  2. valid tool call, including streamed arguments when supported;
+  3. fragmented argument assembly;
+  4. call-ID/argument/schema validation;
+  5. synthetic tool result associated with the correct call ID;
+  6. complete conversation resubmission;
+  7. complete, correctly terminated continuation.
+- Supported variants for multiple tool calls, long tool observations, invalid tool arguments, interrupted tool-call streams, streaming/non-streaming, JSON/schema output, reasoning-enabled responses, and near-context requests.
+- Deterministic tool-choice controls where supported.
+- Explicit classification of provider/protocol failure versus model semantic behavior.
+- Cost preflight with dated pricing, conservative upper-bound estimate, request/token/concurrency/duration ceilings, unknown-pricing handling, and fail-closed execution guards.
+- Offline mocked integration tests covering all supported conformance and error paths.
 
-- [ ] Implement parser, validator, mapping, and storage tests against mocked Free/Pro fixtures first. Do not perform live AA sync until the user confirms the access tier and applicable data-use rights.
-- [ ] Implement `aa sync --tier auto` with key supplied via `AA_API_KEY`, Free/Pro support, pagination, timeouts/backoff, 401/403/429 distinction, quota header preservation and no retry storms.
-- [ ] In Free mode, ingest available indices; preserve `artificial_analysis_coding_index` and `artificial_analysis_agentic_index` as `null` if provided. Do not imply individual benchmark scores are available on Free.
-- [ ] In Pro mode, store **published per-benchmark evaluations** as-is, notably `aa_briefcase_elo`, `automationbench_aa`, `frontiercode_v2_0`, `terminalbench_v4_0`, `gdp_pdf` when present; never fill absent scores.
-- [ ] Save immutable raw pages, normalized `models.jsonl`, manifest with AA index version and access tier, attribution/source/version and cryptographic hashes. Put `latest.json` pointer only after successful full validation.
-- [ ] Add tracked-model mapping file with explicit AA ID/slug/revision/reasoning-tier confidence; do not silently match alias or model family. Include `unmatched/not_covered/not_entitled/not_measured` states.
-- [ ] Write unit tests against mocked paginated Free and Pro API responses, variant conflict, null scores, drift and index-version changes; never require network in CI.
-- [ ] Ensure AA raw records are gitignored by default and not included in public exports without the relevant rights. Add `docs/AA_DATA.md` with attribution and license constraints.
+**Exit criteria**
 
-**Exit:** Authorized users can refresh local AA reference snapshots without touching benchmark trial data. Results remain independent; no combined leaderboard or workload-mapping logic.
+- Complete offline raw-to-normalized demonstration works on mocked responses.
+- AIPerf metrics and custom probe results preserve provenance and unit metadata.
+- Live-turn conformance contract is implemented and tested offline.
+- Live smoke remains blocked pending explicit authorization.
 
-## Explicit deferral — later project, NOT v0.3
+## Gate 3 — Standard performance profiles
 
-- [ ] **Do not implement now:** joining AA scores and performance into weighted ranking, workload matching, auto-routing, cloud selection, intelligence conclusions, or public leaderboards based on restricted AA data.
-- [ ] Future design may separately consume AA snapshots, model identity mappings, and qualified endpoint result datasets after evidence standards and data rights are defined.
+**Prerequisites:** Gate 2 offline exit; explicit user authorization for any live execution.
 
-## Commands to make available (proposed user-facing interface)
+**Deliverables**
+
+- Immutable smoke, quick, and standard profiles with reusable agent-shaped traffic fixtures for coding, logs, research, documents, structured files, and tools.
+- License-clean synthetic data or explicitly approved traces, with fixture hashes and provenance.
+- 1K/10K/32K/100K workload profiles with verified serialized/tokenized sizes.
+- Bounded concurrency sweeps at C=1/2/4/8 and controlled offered-rate behavior where supported.
+- Stable-prefix, growing-transcript, early-prefix invalidation, interleaved-session, and controlled warm/cold cache scenarios.
+- Provider-reported cache accounting separated from timing-inferred benefit, latency improvement, and cost improvement.
+- Randomized/interleaved run order and repeated observations across time windows.
+- Profile-specific qualification thresholds stored in versioned, format-neutral configuration, with provisional status until calibrated.
+- Statistical summaries with sample size, uncertainty, temporal coverage, and conservative percentile handling.
+- Reports separating direct API, AIPerf replay, custom probes, and framework evidence; no intelligence scoring.
+
+**Exit criteria**
+
+- A repeatable standard profile can qualify, fail, or mark inconclusive a target based on evidence.
+- A new endpoint can be added primarily through configuration.
+- Historical comparisons preserve methodology/config provenance.
+
+## Gate 4 — Long-context and reliability qualification
+
+**Prerequisites:** Gate 3 exit; explicit authorization for large-context, sustained-load, and high-concurrency work.
+
+**Deliverables**
+
+- Context/tokenizer/output-headroom preflight with explicit token counts, budget estimates, payload limits, and safety margin.
+- Separate advertised context, API-accepted context, demonstrated effective context, active per-request context, cumulative session consumption, client compaction, and unknown provider transformations.
+- Guarded escalation from 128K→256K→512K→768K→safe ~1M only where supported.
+- Sentinel checks at the beginning, middle, and end of large contexts; distinguish model failure from server-side truncation.
+- Explicit states for rejected, truncated, budget-skipped, accepted-but-unverified, and demonstrated context.
+- Cache-retention experiments at controlled intervals, such as 5m/30m/2h.
+- Multi-window reliability measurements, bounded sustained load, and concurrent capacity qualification.
+- Conservative capacity findings scoped to tested account, region, endpoint, and time window.
+
+**Exit criteria**
+
+- Evidence-backed findings distinguish acceptance from effectiveness.
+- All large-load operations were explicitly authorized.
+- Qualification, failure, and inconclusive results are supported by objective thresholds and sample evidence.
+
+## Gate 5 — AA synchronization and reference dataset
+
+**Prerequisites:** Gate 1 offline AA fixtures; explicit confirmation of AA access tier and data-use rights for live synchronization.
+
+**Deliverables**
+
+- Authenticated AA importer using `AA_API_KEY` from the environment only.
+- Free and Pro endpoint support, pagination, bounded backoff, and explicit 401/403/429 handling.
+- Free-mode ingestion of available indices while preserving absent coding/agentic scores as null.
+- Pro-mode ingestion of published per-benchmark evaluations as-is, without filling absent scores.
+- Immutable raw pages, normalized `models.jsonl`, snapshot manifests, AA index/version, access tier, source URLs, page counts, hashes, attribution, and rights metadata.
+- Explicit model-ID→AA-ID mapping with revision, reasoning tier, confidence, provenance, and states for unmatched, ambiguous, unavailable, not entitled, and not measured.
+- Schema-evolution handling that preserves unknown fields and adds fixture-based regression tests.
+- Historical snapshots retained without overwrite; latest pointer updated only after successful complete validation.
+- `docs/AA_DATA.md` documenting attribution, licensing constraints, and redistribution boundaries.
+- Offline unit tests for pagination, Free/Pro fixtures, missing/null scores, auth/rate-limit responses, ambiguous aliases, revision mismatch, unknown fields, methodology/index changes, and incomplete snapshots.
+
+**Exit criteria**
+
+- Authorized users can refresh AA reference snapshots independently of endpoint measurements.
+- No restricted AA records are committed or redistributed without rights.
+- No joint leaderboard, ranking, recommendation, or routing logic is introduced.
+
+## Explicit deferral
+
+Do not implement now:
+
+- joining AA scores and endpoint performance;
+- weighted ranking;
+- workload matching;
+- auto-routing;
+- cloud selection;
+- intelligence conclusions;
+- public leaderboards from restricted AA data.
+
+Future work may consume AA snapshots, mapping files, and qualified endpoint datasets after evidence standards and data rights are defined.
+
+## Developer interface targets
 
 ```bash
-bench registry validate
-bench aa sync --tier auto --scope tracked
-bench aa validate --snapshot external/aa/snapshots/<stamp> --offline
-bench run --target <deployment_key> --profile quick --dry-run
-bench run --target <deployment_key> --profile quick --execute --max-usd 5 --max-requests 100
-bench report --run <run_id>
-bench compare --baseline <run_id> --candidate <run_id>
+endpoint-bench registry validate
+endpoint-bench aa sync --tier auto --scope tracked
+endpoint-bench aa validate --snapshot external/aa/snapshots/<stamp> --offline
+endpoint-bench probe --target <deployment_key> --profile smoke --dry-run
+endpoint-bench run --target <deployment_key> --profile quick --dry-run
+endpoint-bench run --target <deployment_key> --profile quick --execute --max-usd <cap> --max-requests <cap>
+endpoint-bench report --run <run_id>
+endpoint-bench compare --baseline <run_id> --candidate <run_id>
 ```
 
-The `$5` / `100` values above are **syntax examples, not permission to spend**. Reject `--execute` without an explicitly selected target, validated forecast, cost/request ceilings, and safe default concurrency. Run AA sync separately from paid inference.
+Dollar/request values are syntax examples, not spending authorization. Reject `--execute` without a selected target, validated manifest, cost/request ceilings, and safe concurrency/rate limits. Run AA sync separately from paid inference.
 
-## Useful source references
+## Gate 6 — Public-readiness and engineering quality
 
-- AIPerf: <https://github.com/ai-dynamo/aiperf>
+**Status:** Pre-alpha source foundation delivered on this branch; release and benchmark MVP remain distinct.
+
+- [x] Add a Python 3.13 package, CLI entry point, registry validation, and network-free dry-run manifest.
+- [x] Add fail-closed behavior for missing run mode and unimplemented `--execute`.
+- [x] Add accurate README, methodology, result contract, development guide, contribution guide, security policy, changelog, and synthetic example.
+- [x] Add offline tests, GitHub Actions CI, pinned actions, locked dependencies, and least-privilege workflow permissions.
+- [x] Obtain owner license approval and add the MIT `LICENSE`.
+- [x] Verify the offline workflow in an isolated local checkout; macOS compatibility is verified only for that local environment.
+- [ ] Complete Linux clean-clone verification and observe a passing GitHub Actions run after the owner authorizes a push.
+- [ ] Implement a synthetic report example and schema validation for normalized trial artifacts.
+
+The pre-alpha source milestone is ready for release review after license approval and CI verification; live inference is not required for it. The benchmark MVP remains gated on AIPerf integration, conformance probes, normalized live evidence, reports, and at least one authorized live experiment. Expanded cache, long-context, reliability, and AA work remains a later milestone.
+
+**Exit:** A fresh outsider can install, run the offline example, inspect the manifest, and understand that no benchmark evidence exists. A pre-alpha release additionally requires approved licensing and verified CI. A benchmark MVP additionally requires the Gate 2/3 live evidence listed above.
+
+## Useful references
+
+- AIPerf 0.13.0: <https://github.com/ai-dynamo/aiperf>
 - AIPerf benchmark datasets: <https://github.com/ai-dynamo/aiperf/blob/main/docs/benchmark-datasets.md>
 - AIPerf agentic-code generator: <https://github.com/ai-dynamo/aiperf/blob/main/docs/tutorials/agentic-code-generator.md>
-- AA data API: <https://artificialanalysis.ai/data-api/docs>
-- AA endpoint definitions: <https://artificialanalysis.ai/data-api/docs/reference>
-- AA intelligence methodology: <https://artificialanalysis.ai/methodology/intelligence-benchmarking>
+- AA Data API: <https://artificialanalysis.ai/data-api/docs>
+- AA API reference: <https://artificialanalysis.ai/data-api/docs/reference>
+- AA methodology: <https://artificialanalysis.ai/methodology/intelligence-benchmarking>
