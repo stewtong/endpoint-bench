@@ -26,7 +26,7 @@ Only the latest default branch and tagged releases are supported. The project is
 - External pull-request workflows must not run paid or live inference.
 - API responses and provider metadata are untrusted input; response text is never executed.
 
-GitHub private vulnerability reporting and secret scanning cannot be verified from a local checkout. The repository owner should confirm both repository settings before public promotion.
+As of 2026-11-01, GitHub Dependabot vulnerability alerts and secret scanning were observed disabled in repository settings. The owner should enable both before public promotion. The GitHub security-advisory URL above remains the private reporting path; do not open a public issue for sensitive vulnerabilities.
 
 ## Data handling
 
