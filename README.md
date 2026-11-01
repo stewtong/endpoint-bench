@@ -40,9 +40,9 @@ The current implementation is an early, offline-only foundation. It does not yet
 | Concurrency and stability benchmarks | Planned |
 | Long-context benchmarks | Planned |
 | AA metadata import | Planned |
-| Live paid endpoint execution | Implemented but fail-closed and unauthorized |
+| Live paid endpoint execution | Implemented; one authorized 2-request smoke run completed |
 
-There are no benchmark results yet. Do not interpret generated manifests, probe evidence, or reports as measured endpoint performance. AIPerf integration has been verified only against a local mock, never a live provider.
+There are no benchmark results yet. A single 2-request authorized smoke run exists as screening evidence only; it is not a qualification verdict. Do not interpret generated manifests, probe evidence, or reports as measured endpoint performance. AIPerf integration has been verified only against a local mock, never a live provider.
 
 ## Quickstart
 

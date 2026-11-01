@@ -17,11 +17,12 @@ from .aiperf import (
     run_aiperf,
     write_config,
 )
+from .cost import estimate_cost_usd
 from .dry_run import build_dry_run_manifest
 from .fixtures import generate_fixture
 from .network_guard import NetworkGuardError, assert_loopback, is_loopback
 from .probes import ProbeConfig, probe, probe_tool_round_trip
-from .profiles import ProfileError, load_profile
+from .profiles import Profile, ProfileError, load_profile
 from .registry import Deployment, RegistryError, load_registry
 from .report import (
     ReportError,
@@ -140,7 +141,9 @@ def _credential_env(deployment: Deployment) -> tuple[dict[str, str], list[str]]:
     return {deployment.credential_env_name: value}, []
 
 
-def _execute_guard(deployment: Deployment, args: argparse.Namespace, planned: int) -> list[str]:
+def _execute_guard(
+    deployment: Deployment, args: argparse.Namespace, profile: Profile
+) -> list[str]:
     """Return blocking reasons for live execution. Empty means allowed.
 
     A local target must be a numeric loopback address on an explicit port.
@@ -148,6 +151,7 @@ def _execute_guard(deployment: Deployment, args: argparse.Namespace, planned: in
     resolves to loopback is rejected for unattended execution.
     """
     blockers: list[str] = []
+    planned = profile.request_count
     loopback = is_loopback(deployment.base_url)
 
     if loopback:
@@ -168,6 +172,18 @@ def _execute_guard(deployment: Deployment, args: argparse.Namespace, planned: in
             )
         if args.max_usd is None:
             blockers.append("live execution requires --max-usd")
+        elif args.max_usd <= 0:
+            blockers.append("--max-usd must be positive")
+        else:
+            estimate = estimate_cost_usd(deployment, profile)
+            if estimate is None:
+                blockers.append(
+                    "cost estimate unavailable: verified per-million rates are missing"
+                )
+            elif estimate > args.max_usd:
+                blockers.append(
+                    f"estimated cost ${estimate:.6f} exceeds --max-usd ${args.max_usd:.6f}"
+                )
     if args.max_requests is None:
         blockers.append("execution requires --max-requests")
     elif args.max_requests <= 0:
@@ -301,7 +317,7 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
         _json_print(build_dry_run_manifest(registry, deployment, profile))
         return 0
 
-    blockers = _execute_guard(deployment, arguments, profile.request_count)
+    blockers = _execute_guard(deployment, arguments, profile)
     if blockers:
         for reason in blockers:
             print(f"error: {reason}", file=sys.stderr)
@@ -327,7 +343,9 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
         artifact_dir=Path("pending"),
         credential_env_name=deployment.credential_env_name or None,
         streaming=profile.streaming,
-        capture_raw=False,
+        # Raw request/response evidence is the backbone of every run: it is the
+        # only place the HTTP status and the exact outbound headers survive.
+        capture_raw=True,
     )
     preview_sha = hashlib.sha256(dump_yaml(config).encode("utf-8")).hexdigest()
     run_id = f"run-{preview_sha[:12]}"
@@ -375,6 +393,7 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
         trials_path=run_dir / "trials.jsonl",
         artifact_dir=run_dir / "aiperf",
         process_deadline_s=arguments.process_timeout,
+        max_usd_ceiling=arguments.max_usd,
     )
     report = build_report(
         run_id=run_id,

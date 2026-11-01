@@ -33,6 +33,7 @@ SUPPORTED_CONFIG_SCHEMA_VERSION = "2.0"
 
 SUMMARY_FILE = "profile_export_aiperf.json"
 RECORDS_FILE = "profile_export.jsonl"
+RAW_RECORDS_FILE = "profile_export_raw.jsonl"
 
 
 class AiperfError(RuntimeError):
@@ -125,7 +126,10 @@ def build_benchmark_config(
         raise AiperfError("concurrency cannot exceed requests")
 
     endpoint: dict[str, Any] = {
-        "url": base_url.rstrip("/"),
+        # Registry base URLs follow the OpenAI convention and end in `/v1`.
+        # AIPerf appends the endpoint path itself (`/v1/chat/completions` for
+        # chat), so passing the `/v1` base through would duplicate the segment.
+        "url": _aiperf_url(base_url),
         "type": "chat",
         "streaming": streaming,
         "timeout": client.request_timeout_s,
@@ -168,6 +172,14 @@ def build_benchmark_config(
             },
         },
     }
+
+
+def _aiperf_url(base_url: str) -> str:
+    """Convert an OpenAI-style base URL into the server root AIPerf expects."""
+    root = base_url.rstrip("/")
+    if root.endswith("/v1"):
+        root = root[: -len("/v1")]
+    return root
 
 
 def dump_yaml(value: Any, indent: int = 0) -> str:
@@ -619,6 +631,7 @@ def _trial_from_record(
     index: int,
     target_input_tokens: int | None = None,
     token_tolerance_pct: float = 10.0,
+    http_status: int | None = None,
 ) -> Trial:
     metadata = record.get("metadata") or {}
     metrics = record.get("metrics") or {}
@@ -640,11 +653,20 @@ def _trial_from_record(
         trial.observe(LifecycleState.CANCELLED)
         trial.outcome = OutcomeState.UNKNOWN
         trial.outcome_detail = "cancelled"
-        trial.attempts.append(HttpAttempt(attempt_index=1, started_at=utc_now()))
+        trial.attempts.append(
+            HttpAttempt(attempt_index=1, started_at=utc_now(), http_status=http_status)
+        )
         return trial
 
     trial.observe(LifecycleState.STARTED)
-    trial.attempts.append(HttpAttempt(attempt_index=1, started_at=utc_now(), ended_at=utc_now()))
+    trial.attempts.append(
+        HttpAttempt(
+            attempt_index=1,
+            started_at=utc_now(),
+            ended_at=utc_now(),
+            http_status=http_status,
+        )
+    )
 
     error = record.get("error")
     if isinstance(error, dict):
@@ -680,6 +702,32 @@ def _trial_from_record(
     return trial
 
 
+def _load_http_statuses(artifact_dir: Path) -> dict[str, int]:
+    """Map request id to HTTP status from raw evidence.
+
+    The normalized records carry metrics but not the HTTP status; only the raw
+    export has it. Joined by `x_request_id` rather than by position because
+    records are written per worker and order is not guaranteed.
+    """
+    statuses: dict[str, int] = {}
+    raw_path = artifact_dir / RAW_RECORDS_FILE
+    if not raw_path.is_file():
+        return statuses
+    for line in raw_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            raw = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        status = raw.get("status")
+        request_id = (raw.get("metadata") or {}).get("x_request_id")
+        if isinstance(status, int) and isinstance(request_id, str):
+            statuses[request_id] = status
+    return statuses
+
+
 def parse_artifacts(
     artifact_dir: Path,
     *,
@@ -711,6 +759,8 @@ def parse_artifacts(
             "Only per-request error evidence is available."
         )
 
+    status_by_request = _load_http_statuses(artifact_dir)
+
     records: list[dict[str, Any]] = []
     if records_path.is_file():
         for line in records_path.read_text(encoding="utf-8").splitlines():
@@ -734,6 +784,9 @@ def parse_artifacts(
             index=index,
             target_input_tokens=target_input_tokens,
             token_tolerance_pct=token_tolerance_pct,
+            http_status=status_by_request.get(
+                str((record.get("metadata") or {}).get("x_request_id"))
+            ),
         )
         for index, record in enumerate(records)
     ]

@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from .aiperf import AiperfResults, AiperfRun, ClientProfile
+from .cost import cost_preflight
 from .profiles import Profile
 from .registry import Deployment
 from .trials import (
@@ -106,6 +107,7 @@ def build_provenance(
     trials_path: Path | None = None,
     artifact_dir: Path | None = None,
     process_deadline_s: float | None = None,
+    max_usd_ceiling: float | None = None,
 ) -> dict[str, Any]:
     """Record everything needed to interpret or reproduce this run.
 
@@ -170,6 +172,9 @@ def build_provenance(
             "difference": actual - planned,
         },
         "tokens": tokens,
+        "cost_preflight": cost_preflight(
+            deployment, profile, ceiling_usd=max_usd_ceiling
+        ),
         "termination": run.termination.to_dict() if run else None,
         "artifacts": {
             "config_path": _relative(config_path, run_dir),

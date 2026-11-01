@@ -503,3 +503,83 @@ def test_provenance_reconciles_requests_for_a_real_run(tmp_path: Path) -> None:
     assert run.exit_code == 0
     assert observed == results.counters.http_attempts == 3
     assert run.termination.reason == "completed"
+
+
+def test_openai_base_url_is_normalised_for_aiperf(tmp_path: Path) -> None:
+    """AIPerf appends /v1/chat/completions, so the /v1 base must not survive."""
+    config = build_benchmark_config(
+        model_id="mock-model",
+        base_url="https://api.example.invalid/v1",
+        client=BASELINE_CLIENT,
+        requests=2,
+        concurrency=1,
+        input_tokens=32,
+        output_tokens=8,
+        artifact_dir=tmp_path,
+        credential_env_name="ENDPOINT_BENCH_OFFLINE_API_KEY",
+    )
+
+    assert config["benchmark"]["endpoint"]["url"] == "https://api.example.invalid"
+
+
+def test_base_url_without_v1_is_unchanged(tmp_path: Path) -> None:
+    config = build_benchmark_config(
+        model_id="mock-model",
+        base_url="http://127.0.0.1:18080",
+        client=BASELINE_CLIENT,
+        requests=1,
+        concurrency=1,
+        input_tokens=8,
+        output_tokens=4,
+        artifact_dir=tmp_path,
+        credential_env_name=None,
+    )
+
+    assert config["benchmark"]["endpoint"]["url"] == "http://127.0.0.1:18080"
+
+
+def test_http_status_is_joined_from_raw_evidence(tmp_path: Path) -> None:
+    """The normalized record has metrics only; status lives in the raw export."""
+    artifact = tmp_path / "joined"
+    artifact.mkdir()
+    (artifact / "profile_export_aiperf.json").write_text(
+        json.dumps({"schema_version": "1.4", "aiperf_version": "0.13.0"})
+    )
+    (artifact / "profile_export.jsonl").write_text(
+        json.dumps(
+            {
+                "metadata": {"x_request_id": "req-1", "was_cancelled": False},
+                "metrics": {"time_to_first_token": {"value": 1.0, "unit": "ms"}},
+            }
+        )
+        + "\n"
+    )
+    (artifact / "profile_export_raw.jsonl").write_text(
+        json.dumps({"metadata": {"x_request_id": "req-1"}, "status": 200}) + "\n"
+    )
+
+    results = parse_artifacts(artifact, deployment_key="d", profile_name="p")
+
+    assert results.trials[0].attempts[0].http_status == 200
+
+
+def test_missing_raw_evidence_leaves_status_unknown(tmp_path: Path) -> None:
+    artifact = tmp_path / "noraw"
+    artifact.mkdir()
+    (artifact / "profile_export_aiperf.json").write_text(
+        json.dumps({"schema_version": "1.4", "aiperf_version": "0.13.0"})
+    )
+    (artifact / "profile_export.jsonl").write_text(
+        json.dumps(
+            {
+                "metadata": {"x_request_id": "req-1", "was_cancelled": False},
+                "metrics": {"time_to_first_token": {"value": 1.0, "unit": "ms"}},
+            }
+        )
+        + "\n"
+    )
+
+    results = parse_artifacts(artifact, deployment_key="d", profile_name="p")
+
+    # Unknown is None, never a fabricated 200.
+    assert results.trials[0].attempts[0].http_status is None

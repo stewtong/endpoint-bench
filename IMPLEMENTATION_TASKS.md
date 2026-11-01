@@ -106,7 +106,13 @@ Remaining gaps, stated rather than implied:
 
 - Trace-replay provenance labelling exists as a workload enum and report label, but no replay dataset has been executed through the harness.
 - The raw-to-normalized demonstration runs through the AIPerf wrapper and through the independent probe client as separate evidence streams; there is no single AIPerf-produced tool-call run.
-- Live endpoint behaviour, including whether a provider honours affinity headers, is unverified. Live smoke remains blocked pending explicit authorization.
+- Live qualification is not established. One authorized smoke run completed against a single deployment (see below); it is screening evidence, not qualification.
+
+**Live smoke (2026-11-01, owner-authorized).** `deepseek-ai/DeepSeek-V4.1-Flash-1017` on `api.tokenfactory.nebius.com`, 2 requests, smoke profile, baseline client, $0.01 ceiling against a $0.00023 estimate. Both trials succeeded with HTTP 200 and no automatic retries. Observed (n=2, single window, screening only): TTFT 575.5 ms, request latency 699.0 ms, output throughput 44.2 tokens/sec. Raw evidence confirms no `X-Session-Affinity` header was sent and that the credential stayed out of every artifact.
+
+The run also produced the first real token-sizing finding: the provider reported 160 and 165 prompt tokens against AIPerf's built-in tokenizer count of 128, a 25.0% and 28.9% discrepancy. This is a genuine tokenizer mismatch, not a harness defect, and it is why the built-in tokenizer must not be treated as authoritative for a hosted model. `claims_supported` is therefore false for this run and no token-normalized claim is made.
+
+What this does **not** establish: capacity, concurrency behaviour, cache behaviour, long context, tool support on the live endpoint, reliability over time, or any qualification verdict.
 
 ## Gate 3 — Standard performance profiles
 

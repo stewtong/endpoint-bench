@@ -15,6 +15,9 @@ All notable changes are documented here. This project distinguishes the software
 - Proxy-variable stripping and redirect refusal for local execution.
 - SIGTERM-then-SIGKILL process-group termination with orphan-worker detection and separate classification of timeout, cancellation, benchmark failure, and harness failure.
 - `probe --scenario tool-round-trip` workflow.
+- Cost preflight that computes a conservative upper-bound estimate from verified per-million rates and refuses execution when the estimate exceeds `--max-usd` or when rates are missing.
+- HTTP status joined from raw evidence by request id, so attempt records carry the observed status.
+- OpenAI-style `/v1` base URLs are normalised for AIPerf, which appends the endpoint path itself.
 - Normalized trial evidence model separating lifecycle from outcome, with separate counts for planned, started, transport-completed, protocol-completed, successful, failed, skipped, cancelled trials and HTTP attempts.
 - Local OpenAI-compatible mock provider with deterministic streaming, failure, truncation, interruption, timeout, missing-usage, and tool-call behaviors, recording every received request for server-side verification.
 - Deterministic, hashable synthetic prompt fixture generator.
