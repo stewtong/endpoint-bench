@@ -15,9 +15,9 @@ This project focuses on those operational properties. It treats broad model qual
 - **AIPerf 0.13.0** is the pinned performance, load, and trace-replay engine. It is driven as a subprocess and is not a project dependency.
 - **Artificial Analysis (AA)** is a separately stored external reference for model capability data. AA import is not implemented.
 
-The implementation covers provider configuration, workload profiles, AIPerf orchestration, protocol conformance probes, normalized evidence, and comparative reporting. Cache measurement, long-context qualification, and AA synchronization remain unimplemented.
+The implementation covers provider configuration, workload profiles, AIPerf orchestration, trace replay, protocol conformance probes, normalized evidence with per-metric validity, and comparative reporting. Cache measurement, long-context qualification, multi-window reliability, and AA synchronization remain unimplemented.
 
-**Project version:** software `0.0.1` (pre-alpha); specification/methodology `0.5.1`; result schema `0.1.0`; profile schema `1.0`; pinned engine AIPerf `0.13.0`.
+**Project version:** software `0.1.0` (benchmark MVP); specification/methodology `0.5.1`; result schema `0.1.0`; profile schema `1.0`; pinned engine AIPerf `0.13.0`.
 
 ## Current status
 
@@ -28,26 +28,29 @@ The implementation covers provider configuration, workload profiles, AIPerf orch
 | Normalized trial evidence (lifecycle/outcome/attempts) | Implemented |
 | Local OpenAI-compatible mock provider | Implemented |
 | Streaming conformance probes | Implemented |
-| AIPerf 0.13.0 subprocess integration | Implemented (offline-verified) |
-| Report and comparison commands | Implemented (offline evidence only) |
+| AIPerf 0.13.0 subprocess integration | Implemented, verified offline and live |
+| Agent-shaped trace replay | Implemented, verified offline |
+| Report and comparison commands | Implemented |
+| Metric-specific validity states | Implemented |
+| Provider token accounting | Implemented (`--token-accounting server`) |
 | CLI entry point | Implemented |
-| Tests and CI | Implemented |
-| Tool-call round-trip probes | Implemented (offline-verified) |
+| Tests and CI | Implemented, green on GitHub Actions |
+| Tool-call round-trip probes | Implemented, verified offline and live |
 | Process deadline and cleanup | Implemented |
 | Numeric-loopback execution guard | Implemented |
+| Screening profiles (1K/10K/32K) | Implemented and executed |
 | Cache benchmarks | Planned |
-| Concurrency and stability benchmarks | Planned |
-| Long-context benchmarks | Planned |
+| Long-context qualification (100K-1M) | Planned |
+| Multi-window reliability | Planned |
 | AA metadata import | Planned |
-| Live paid endpoint execution | Implemented; one authorized 2-request smoke run completed |
 
-There are no benchmark results yet. One authorized 2-request smoke run against a single deployment exists as screening evidence only; it is not a qualification verdict and supports no capacity, reliability, cache, or long-context claim. Offline evidence comes from a local mock. Do not interpret generated manifests, probe evidence, or reports as endpoint qualification.
+**There are screening measurements but no qualification.** Six screening cells against one deployment — 1K/10K/32K at concurrency 1 and 2, 120 trials, zero failures — are recorded in [`docs/GATE3_RESULTS.md`](docs/GATE3_RESULTS.md). That evidence is single-window and 20 samples per cell. It supports none of the following: a qualification verdict, percentile claims, capacity, reliability, cache behaviour, or a comparison between sizing or concurrency cells. One live tool-call continuation also passed.
 
-No endpoint has been qualified, failed, or measured to a standard profile. Qualification is a later gate.
+No endpoint has been qualified or failed. Qualification requires calibrated thresholds and multi-window evidence, which do not exist yet.
 
 ## Quickstart
 
-The verified workflows are offline (no provider contact).
+The quickstart is offline and needs no credentials. Live execution exists but is fail-closed and requires explicit authorization; see [Live execution](#live-execution).
 
 ```bash
 git clone https://github.com/stewtong/endpoint-bench.git
@@ -128,6 +131,38 @@ One logical trial, two HTTP attempts: the tool call plus the continuation. The p
 
 AIPerf 0.13.0 sends `X-Session-Affinity` by default, which can improve cache locality and make an endpoint look faster than it would for an ordinary client. Baseline runs disable it and verify its absence at the receiving server; affinity experiments are separate result identities. See [`docs/decisions/0002-architecture-and-aiperf-verification.md`](docs/decisions/0002-architecture-and-aiperf-verification.md).
 
+## Live execution
+
+Live inference is fail-closed. A run refuses to start unless every condition holds:
+
+- `--execute` with `--max-requests` at or below the profile's plan;
+- for a non-loopback target, `--authorize-live`;
+- verified per-million pricing in the registry;
+- `--max-usd` above the computed conservative estimate;
+- the credential environment variable named by the registry is set.
+
+Local unattended execution is restricted to explicit numeric loopback addresses on an explicit port. Hostnames are not trusted, proxy variables are stripped, and redirects are refused.
+
+```bash
+uv run endpoint-bench run \
+  --config ~/.endpoint-bench/registry.live.json \
+  --target <deployment_key> \
+  --profile screening-10k --concurrency 2 \
+  --token-accounting server \
+  --execute --authorize-live --max-requests 20 --max-usd 0.20
+```
+
+Conformance probes have their own path, and a non-loopback probe additionally requires `--authorize-live`:
+
+```bash
+uv run endpoint-bench probe \
+  --config ~/.endpoint-bench/registry.live.json \
+  --target <deployment_key> \
+  --profile smoke --scenario tool-round-trip --requests 1 --authorize-live
+```
+
+A client-side ceiling is a bound, not a provider billing limit. Use `probe --dry-run` or `run --dry-run` to inspect the plan and cost estimate before spending anything.
+
 ## Configuration
 
 See [`configs/registry.example.json`](configs/registry.example.json). A provider contains a URL, protocol, region, non-secret credential environment-variable name, and one or more deployments. The registry never stores credentials.
@@ -157,9 +192,10 @@ Never compare endpoints across undisclosed model revisions, client settings, tra
 
 ## Limitations
 
-- No endpoint has been qualified. One 2-request live smoke run is screening evidence only.
-- Cache measurement, long-context qualification, trace replay, and AA import are not implemented.
-- The built-in tokenizer does not match every hosted model. On the single live run it undercounted prompt tokens by 25-29% against provider-reported usage, which withholds token-normalized claims.
+- No endpoint has been qualified. Screening evidence only, from one window.
+- Cache measurement, long-context qualification, multi-window reliability, and AA import are not implemented.
+- The built-in tokenizer does not match every hosted model; on this endpoint it differed from provider-reported usage by 25-29% at a 128-token workload. Use `--token-accounting server` there, which makes the denominator authoritative but stops verifying delivered target size.
+- Traces are replayed, never executed as live agent tool loops. Replay measures traffic shape, not agent behaviour.
 - Public shared capacity and provider revisions can change independently of model identity.
 - API telemetry, token accounting, cache state, and context behavior vary by provider.
 - Large-context behavior cannot be inferred safely from an HTTP 200 response.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "endpoint-bench"
-version = "0.0.1"
+version = "0.1.0"
 description = "Provider-neutral operational benchmarking for public LLM inference endpoints"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 authors = [{ name = "Stewart Tong" }]
 keywords = ["llm", "inference", "benchmarking", "performance", "aiperf"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: MIT License",
   "Operating System :: MacOS",

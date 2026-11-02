@@ -1,7 +1,7 @@
 # Benchmark methodology
 
 **Version:** 0.5.1 — **Datestamp:** 2026-11-01
-**Status:** Design contract. The repository implements offline configuration validation, dry-run manifests, normalized trial evidence, deterministic conformance probes, and a pinned AIPerf 0.13.0 wrapper verified against a local mock and exercised in one authorized live smoke run. No endpoint has been qualified, and no capacity, reliability, cache, or long-context claim is supported.
+**Status:** Design contract. The repository implements offline configuration validation, dry-run manifests, normalized trial evidence with per-metric validity, deterministic conformance probes, a pinned AIPerf 0.13.0 wrapper, and agent-shaped trace replay. Six screening cells and a live tool-call continuation have run against one deployment. No endpoint has been qualified, and no capacity, reliability, cache, or long-context claim is supported.
 
 ## Measurement scope
 

@@ -48,6 +48,32 @@ VIRTUAL_ENV=.venv-aiperf uv pip install aiperf==0.13.0
 
 Before changing integration code, read [`docs/decisions/0002-architecture-and-aiperf-verification.md`](decisions/0002-architecture-and-aiperf-verification.md). It records verified behavior and the ten integration invariants that tests enforce.
 
+## Local benchmark and scripts
+
+```bash
+uv run endpoint-bench mock --port 18080          # serve the mock provider
+./scripts/verify.sh                              # full local verification
+./scripts/verify.sh --with-engine                # include engine-dependent suites
+./scripts/push-and-open-pr.sh                    # push branch and open a PR
+```
+
+Agent-shaped trace replay against the mock:
+
+```bash
+uv run endpoint-bench run \
+  --config examples/local-benchmark/registry.json \
+  --target local-mock-agent-replay \
+  --trace-file examples/local-benchmark/agent-trace.jsonl \
+  --execute --max-requests 12
+```
+
+Token accounting can come from the built-in tokenizer (default) or from provider
+usage. Use provider usage on any endpoint whose tokenizer does not match `builtin`:
+
+```bash
+uv run endpoint-bench run ... --token-accounting server
+```
+
 ## Repository map
 
 - `src/endpoint_bench`: provider-neutral implementation.

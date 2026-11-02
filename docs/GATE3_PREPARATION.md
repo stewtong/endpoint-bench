@@ -2,7 +2,7 @@
 
 **Version:** 0.1.0
 **Datestamp:** 2026-11-01
-**Source:** Gate 2 verified state, one authorized live smoke run, and the local-mock trace-replay demonstration.
+**Source:** Gate 2 verified state, live smoke and tool-call runs, the local-mock trace-replay demonstration, and the six-cell screening matrix.
 **Status:** Screening matrix executed 2026-11-02; results in [`GATE3_RESULTS.md`](GATE3_RESULTS.md). Screening is not qualification.
 **Update rule:** Replace plan values with measured evidence as each experiment runs. Do not restate unexecuted work as complete.
 
