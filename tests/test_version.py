@@ -12,4 +12,4 @@ def test_version() -> None:
         text=True,
     )
 
-    assert result.stdout == "endpoint-bench 0.0.1\n"
+    assert result.stdout == "endpoint-bench 0.1.0\n"

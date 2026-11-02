@@ -36,6 +36,10 @@ Implemented fields:
 
 A dry-run manifest is not benchmark evidence, a trial result, or a capability claim.
 
+## Probe dry-run manifest
+
+`probe --dry-run` emits `manifest_type: probe_dry_run` with `planned_trials`, `planned_http_attempts` (2 per trial for `tool-round-trip`, 1 for `streaming`), `inference.network_requests: 0`, and a `cost_preflight` block. It sends nothing.
+
 ## Probe manifest
 
 Written to `<run-dir>/manifest.json` by `endpoint-bench probe`.
@@ -48,6 +52,7 @@ Written to `<run-dir>/manifest.json` by `endpoint-bench probe`.
 | `counters` | Lifecycle and outcome counts, including `http_attempts`. |
 | `trials_path`, `trials_sha256` | Normalized trial JSONL and its hash. |
 | `warnings` | Non-blocking conditions, such as a missing credential variable. |
+| `authorization` | `live_authorized`, the credential variable name, and the cost preflight. Present only when a non-loopback target was exercised. |
 
 ## Normalized trial records
 
@@ -101,13 +106,14 @@ Written to `<run-dir>/report.json` by `endpoint-bench run`, and comparable by `e
 
 | Field | Semantics |
 |---|---|
-| `client_profile` | Explicit client configuration plus a stable `identity` hash. Baseline and affinity-enabled profiles are distinct identities. |
+| `client_profile` | Explicit client configuration plus a stable `identity` hash. Baseline and affinity-enabled profiles are distinct identities. `token_accounting_source` is `client_tokenizer` or `provider_usage`. |
 | `engine` | AIPerf version, summary schema version, and whether the schema was validated before parsing. |
 | `benchmark_failed` | True when the run produced no successful responses. Distinct from an integration failure. |
 | `counters`, `outcomes` | Accounting as above. |
 | `metrics` | Selected AIPerf metrics with `unit` preserved. Absent metrics stay absent. |
 | `token_accounting` | Aggregate sizing verdict. `claims_supported` is false unless every evaluated trial is within tolerance. |
 | `provenance` | Engine, deployment, profile, client, affinity mode, timeout and retry policy, planned-versus-actual request reconciliation, termination, and run-relative artifact locations. |
+| `metric_validity` | Per-metric usability: `valid`, `valid_mean_only`, `invalid_token_sizing`, `invalid_client_tokenization`, `not_observed`. A token-sizing problem does not invalidate latency evidence. |
 | `limitations` | Interpretation restrictions, including unvalidated schema. |
 
 ### Workload types

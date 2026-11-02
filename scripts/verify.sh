@@ -7,6 +7,10 @@ cd "$(dirname "$0")/.."
 WITH_ENGINE=0
 [[ "${1:-}" == "--with-engine" ]] && WITH_ENGINE=1
 
+# Scratch directories are cleared so the script is re-runnable. Run directories
+# are immutable by design, so a leftover directory is a hard error otherwise.
+rm -rf /tmp/verify-probe-stream /tmp/verify-probe-tool
+
 echo "==> sync (locked)"
 uv sync --locked
 

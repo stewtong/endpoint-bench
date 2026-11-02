@@ -228,11 +228,11 @@ Dollar/request values are syntax examples, not spending authorization. Reject `-
 - [ ] Commit a synthetic report example alongside the existing synthetic dry-run manifest.
 - [x] Repository published publicly with Dependabot alerts, Dependabot security updates, secret scanning, and push protection enabled.
 
-The pre-alpha source milestone is ready for release review after license approval and CI verification; live inference is not required for it.
+The pre-alpha source milestone is satisfied: license approved, CI verified on Linux, public repository with scanning enabled. The benchmark MVP criteria below are also met; neither constitutes a qualification milestone.
 
-The benchmark MVP's implementation criteria are now met offline: AIPerf integration, streaming and tool-call conformance probes, normalized evidence, reports, and one authorized live experiment all exist. What remains is not implementation but evidence at scale: repeatable profiles exercised with enough samples and temporal coverage to support a qualification verdict. Expanded cache, long-context, reliability, and AA work remains a later milestone.
+The benchmark MVP's criteria are met, online as well as offline: AIPerf integration, streaming and tool-call conformance probes, normalized evidence with per-metric validity, reports, and reproducible authorized live experiments all exist and have run. What remains is not implementation but evidence at scale: multi-window repeats, interleaved ordering, and calibrated thresholds before any qualification verdict. Cache, long-context, reliability, and AA work remains a later milestone.
 
-**Exit:** A fresh outsider can install, run the offline example, inspect the manifest, and understand that no endpoint has been qualified. One authorized 2-request smoke run is labelled as screening evidence only. A pre-alpha release additionally requires approved licensing and verified CI. A benchmark MVP additionally requires the Gate 2/3 live evidence listed above.
+**Exit:** A fresh outsider can install, run the offline example, inspect the manifest, and understand that no endpoint has been qualified. Screening measurements exist and are labelled as such. Licensing and CI verification are satisfied; the benchmark MVP criteria are met.
 
 ## Useful references
 

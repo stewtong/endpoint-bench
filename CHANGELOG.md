@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes are documented here. This project distinguishes the software package version, benchmark specification/methodology version, result schema version, profile schema version, and external AIPerf engine version. Current values are software `0.0.1`, specification `0.5.1`, result schema `0.1.0`, profile schema `1.0`, and pinned engine AIPerf `0.13.0`.
+All notable changes are documented here. This project distinguishes the software package version, benchmark specification/methodology version, result schema version, profile schema version, and external AIPerf engine version. Current values are software `0.1.0`, specification `0.5.1`, result schema `0.1.0`, profile schema `1.0`, and pinned engine AIPerf `0.13.0`.
 
 ## [Unreleased]
 
@@ -62,6 +62,14 @@ All notable changes are documented here. This project distinguishes the software
 ### Licensing
 
 - Adopted the MIT License after owner approval.
+
+## [0.1.0] — 2026-11-02
+
+Benchmark MVP. The plan's MVP criteria are met: functional AIPerf integration, endpoint performance measurement, streaming and tool-call conformance probes, repeatable benchmark profiles, normalized metrics and evidence, working reports, and reproducible authorized live experiments.
+
+This is not a qualification milestone. No endpoint has been qualified, no threshold is calibrated, and every measurement so far is single-window screening.
+
+See [Unreleased] above for the change list.
 
 ## [0.0.1] — Unreleased pre-alpha
 

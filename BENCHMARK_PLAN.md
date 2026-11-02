@@ -2,7 +2,7 @@
 
 **Version:** 0.5.1
 **Datestamp:** 2026-11-01  
-**Status:** Approved v0.5 specification; not evidence of completed benchmark runs. The current software is v0.0.1 pre-alpha and implements offline registry validation, dry-run manifests, normalized trial evidence, deterministic conformance probes, and a pinned AIPerf 0.13.0 wrapper. One authorized 2-request live smoke run exists as screening evidence only; no endpoint is qualified.
+**Status:** Approved v0.5 specification. The software is v0.1.0 (benchmark MVP) and implements offline registry validation, dry-run manifests, normalized trial evidence with per-metric validity, deterministic streaming and tool-call conformance probes, a pinned AIPerf 0.13.0 wrapper, agent-shaped trace replay, and reporting. Six screening cells and a live tool-call continuation have been executed against one deployment; that evidence is single-window screening. No endpoint is qualified, and no qualification threshold is calibrated.
 **Source:** `AGENTS.md`, historical Token Factory/OpenClaw evidence, repository inspection, AIPerf 0.13.0, AA documentation, and the v0.5 public-readiness audit.
 **Update rule:** Keep this canonical. Re-verify AIPerf, AA, endpoints, revisions, limits, pricing, reasoning, and cache behavior before execution. Preserve history separately.
 
@@ -39,7 +39,7 @@ Define an immutable `deployment_key` from provider, endpoint URL, non-secret acc
 
 ## 3. Registry and seed candidates
 
-Use provider-neutral, format-neutral declarative configuration. The v0.0.1 foundation uses JSON to avoid an unnecessary parser dependency. Serialization may change only when schema validation, immutable hashing, and versioning remain intact. Never hard-code Token Factory or Nebius assumptions into core orchestration. Store auth environment-variable names, never values.
+Use provider-neutral, format-neutral declarative configuration. The current implementation uses JSON to avoid an unnecessary parser dependency. Serialization may change only when schema validation, immutable hashing, and versioning remain intact. Never hard-code Token Factory or Nebius assumptions into core orchestration. Store auth environment-variable names, never values.
 
 Registry fields include logical label, deployment key, URL, protocol, model ID/revision, region, credential env name, capabilities, advertised/observed context, output limit, tokenizer, reasoning controls, cache controls, rate-limit disclosure, price source/date, AA mapping, and last-verified timestamp. Distinguish `unknown`, `unsupported`, `unverified`, `confirmed`, and `not applicable`.
 
