@@ -3,7 +3,7 @@
 **Version:** 0.1.0
 **Datestamp:** 2026-11-01
 **Source:** Gate 2 verified state, one authorized live smoke run, and the local-mock trace-replay demonstration.
-**Status:** Preparation for Gate 3. No screening profile has been executed against a live endpoint.
+**Status:** Screening matrix executed 2026-11-02; results in [`GATE3_RESULTS.md`](GATE3_RESULTS.md). Screening is not qualification.
 **Update rule:** Replace plan values with measured evidence as each experiment runs. Do not restate unexecuted work as complete.
 
 This document records the three Gate 3 priorities, what is implemented, what is only planned, and what remains blocked. Nothing here is a benchmark result.
@@ -93,7 +93,7 @@ The report is normalized evidence, not a measurement of any real endpoint.
 
 ## 3. Prepared live experiments
 
-**Nothing in this section has been executed.** Every manifest below was produced with `--dry-run` and made zero inference requests.
+The tool-call continuation ran on 2026-11-02 and the six screening cells ran the same day; measured results are in [`GATE3_RESULTS.md`](GATE3_RESULTS.md). The manifests below remain the exact pre-execution plans and are retained for comparison against what actually happened.
 
 Pricing basis: `https://tokenfactory.nebius.com/models`, effective 2026-11-01, DeepSeek V4.1 Flash 1017 at $0.30 / 1M input and $1.20 / 1M output. Estimates apply a 1.5x safety multiplier. A client-side estimate is not a provider billing limit.
 

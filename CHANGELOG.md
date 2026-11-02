@@ -25,6 +25,10 @@ All notable changes are documented here. This project distinguishes the software
 - `run --token-accounting server` to account tokens from provider usage instead of the built-in tokenizer, with the resulting limitation recorded in the report.
 - `scripts/verify.sh` for the full local verification suite and `scripts/push-and-open-pr.sh` for the CI push path.
 
+### Documented
+
+- `docs/GATE3_RESULTS.md`: screening matrix for one deployment at 1K/10K/32K and concurrency 1/2, with explicit statements of what the evidence supports and what it does not.
+
 ### Fixed
 
 - Truncation by our own output ceiling was reported as `tool_call_absent` with attribution `model`. It is now `output_truncated` with attribution `harness`; a model must not be blamed for a limit we imposed.
