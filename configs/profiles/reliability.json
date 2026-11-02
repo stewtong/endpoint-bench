@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "name": "reliability",
+  "description": "Multi-window stability and failure accounting over time.",
+  "request_count": 300,
+  "input_tokens": 1024,
+  "max_output_tokens": 128,
+  "concurrency": 2,
+  "streaming": true,
+  "timeout_s": 120,
+  "qualification": {
+    "status": "provisional",
+    "windows": "multiple",
+    "note": "Single-window results are screening only."
+  }
+}

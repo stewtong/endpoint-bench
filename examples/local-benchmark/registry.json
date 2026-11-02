@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "providers": [
+    {
+      "name": "local-mock",
+      "base_url": "http://127.0.0.1:18080",
+      "protocol": "openai-chat-completions",
+      "region": "loopback",
+      "credential_env_name": "ENDPOINT_BENCH_LOCAL_MOCK_API_KEY",
+      "deployments": [
+        {
+          "deployment_key": "local-mock-agent-replay",
+          "model_id": "mock-model",
+          "model_revision": "synthetic-2026-11-01",
+          "capabilities": {
+            "streaming": "confirmed",
+            "tools": "unverified",
+            "json_output": "unverified",
+            "reasoning": "not_applicable",
+            "prompt_cache_reporting": "not_applicable"
+          },
+          "context": {
+            "advertised_input_tokens": 8192,
+            "effective_input_tokens": null,
+            "context_state": "unverified"
+          },
+          "output_limit_tokens": 512,
+          "tokenizer": "builtin",
+          "cache": {
+            "reports_cached_tokens": false,
+            "controls": []
+          },
+          "last_verified_at": "2026-11-01",
+          "pricing": {
+            "currency": "USD",
+            "prompt_per_million_tokens": 0.0,
+            "completion_per_million_tokens": 0.0,
+            "verified": true,
+            "source": "local mock; no provider billing applies",
+            "effective_date": "2026-11-01"
+          }
+        }
+      ]
+    }
+  ]
+}

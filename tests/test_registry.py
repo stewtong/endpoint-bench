@@ -42,3 +42,34 @@ def test_duplicate_deployments_fail(tmp_path: Path) -> None:
 
     with pytest.raises(RegistryError, match="duplicate deployment_key"):
         load_registry(path)
+
+
+def test_capability_states_are_validated(tmp_path: Path) -> None:
+    document = json.loads(Path("configs/registry.example.json").read_text())
+    document["providers"][0]["deployments"][0]["capabilities"]["tools"] = "probably_yes"
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(document))
+
+    with pytest.raises(RegistryError, match="expected one of"):
+        load_registry(path)
+
+
+def test_invalid_output_limit_is_rejected(tmp_path: Path) -> None:
+    document = json.loads(Path("configs/registry.example.json").read_text())
+    document["providers"][0]["deployments"][0]["output_limit_tokens"] = 0
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(document))
+
+    with pytest.raises(RegistryError, match="output_limit_tokens"):
+        load_registry(path)
+
+
+def test_extended_fields_are_carried_through() -> None:
+    registry = load_registry(Path("configs/registry.example.json"))
+    deployment = registry.deployments["offline-mock-smoke"]
+
+    assert deployment.capabilities["tools"] == "unverified"
+    assert deployment.output_limit_tokens is None
+    assert deployment.tokenizer is None
+    assert deployment.cache["reports_cached_tokens"] is None
+    assert deployment.last_verified_at is None

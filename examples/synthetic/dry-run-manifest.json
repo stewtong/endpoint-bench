@@ -15,7 +15,7 @@
     "provider_name": "offline-mock",
     "region": "local-synthetic"
   },
-  "generated_at": "2026-11-01T22:24:54.181836Z",
+  "generated_at": "2026-11-02T03:41:09.921449Z",
   "inference": {
     "credentials_sent": false,
     "executed": false,
@@ -29,7 +29,7 @@
   "manifest_type": "dry_run",
   "planned_exposure": {
     "estimated_cost": null,
-    "estimated_cost_reason": "not_estimated",
+    "estimated_cost_reason": "not_estimated_pricing_unverified",
     "max_concurrency": 1,
     "max_generated_tokens": 64,
     "max_input_tokens": 256,
@@ -47,7 +47,7 @@
     "source_sha256": "d8dced651cdbe0d1d7e2ccc98f8613a89b74dd6cc21607175c7740d68e470895",
     "streaming": true
   },
-  "run_id": "dryrun-2327f89b9af4",
+  "run_id": "dryrun-b98090c43615",
   "schema_version": "0.1.0",
   "software": {
     "name": "endpoint-bench",
@@ -55,6 +55,6 @@
   },
   "source_hashes": {
     "profile_sha256": "d8dced651cdbe0d1d7e2ccc98f8613a89b74dd6cc21607175c7740d68e470895",
-    "registry_sha256": "2c49ef81bdc2dc37859f4b1f56e1e29c03c353511572175fa9394a3efca6db74"
+    "registry_sha256": "c875b210b834dbddcb55f1609b2ca7bbc7d2b9d04b3db5d6854fd4760046cd54"
   }
 }

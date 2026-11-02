@@ -22,6 +22,9 @@ class Profile:
     max_output_tokens: int
     concurrency: int
     streaming: bool
+    timeout_s: float = 60.0
+    token_tolerance_pct: float = 10.0
+    qualification: dict[str, object] | None = None
 
 
 def load_profile(path: Path | str, expected_name: str | None = None) -> Profile:
@@ -60,6 +63,19 @@ def load_profile(path: Path | str, expected_name: str | None = None) -> Profile:
         )
     if concurrency > request_count:
         raise ProfileError("profile `concurrency` cannot exceed `request_count`")
+
+    timeout_s = document.get("timeout_s", 60.0)
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or timeout_s <= 0:
+        raise ProfileError("profile `timeout_s` must be a positive number")
+
+    tolerance = document.get("token_tolerance_pct", 10.0)
+    if isinstance(tolerance, bool) or not isinstance(tolerance, (int, float)) or tolerance < 0:
+        raise ProfileError("profile `token_tolerance_pct` must be a non-negative number")
+
+    qualification = document.get("qualification")
+    if qualification is not None and not isinstance(qualification, dict):
+        raise ProfileError("profile `qualification` must be an object or absent")
+
     return Profile(
         name=name,
         description=description,
@@ -71,4 +87,7 @@ def load_profile(path: Path | str, expected_name: str | None = None) -> Profile:
         max_output_tokens=max_output_tokens,
         concurrency=concurrency,
         streaming=bool(document.get("streaming", False)),
+        timeout_s=float(timeout_s),
+        token_tolerance_pct=float(tolerance),
+        qualification=dict(qualification) if qualification else None,
     )

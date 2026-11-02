@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "name": "quick",
+  "description": "Low-cost screening. Provisional only; not endpoint qualification.",
+  "request_count": 20,
+  "input_tokens": 2048,
+  "max_output_tokens": 256,
+  "concurrency": 2,
+  "streaming": true,
+  "timeout_s": 120,
+  "qualification": {
+    "status": "provisional",
+    "note": "Thresholds are uncalibrated. Do not treat a pass as production readiness."
+  }
+}

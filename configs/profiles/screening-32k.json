@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "name": "screening-32k",
+  "description": "Screening at 32k input tokens. Provisional only; not endpoint qualification.",
+  "request_count": 20,
+  "input_tokens": 32768,
+  "max_output_tokens": 256,
+  "concurrency": 1,
+  "streaming": true,
+  "timeout_s": 240,
+  "token_tolerance_pct": 10.0,
+  "qualification": {
+    "status": "provisional",
+    "screening": true,
+    "note": "Screening sample only. No qualification threshold is calibrated."
+  }
+}

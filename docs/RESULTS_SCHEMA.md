@@ -1,6 +1,6 @@
 # Result schema contract
 
-**Schema version:** `0.1.0` — early contract for dry-run manifests. Trial, probe, AIPerf, cache, context, and AA schemas will be added before live measurements are accepted.
+**Schema version:** `0.1.0` — dry-run manifests, probe manifests, normalized trial records, and run reports. Trial records and reports carry their own document versions so each can evolve independently.
 
 ## Principles
 
@@ -32,9 +32,96 @@ Implemented fields:
 | `source_hashes` | object | SHA-256 of registry and profile source files. |
 | `limitations` | array | Explicit interpretation restrictions. |
 
-`planned_exposure.estimated_cost` is `null` when pricing is unverified or cost estimation is not implemented; `estimated_cost_reason` explains which state applies. Unknown pricing is valid for registry validation and dry-run, but unbounded/unverifiable pricing must fail closed before unattended live execution.
+`planned_exposure.estimated_cost` is a conservative upper bound computed from verified per-million rates with a 1.5x safety multiplier, or `null` when pricing is unverified or rates are missing. `estimated_cost_reason` is `conservative_upper_bound` or `not_estimated_pricing_unverified`. Unknown pricing is valid for registry validation and dry-run, but it fails closed before unattended non-loopback execution. A client-side estimate is a bound, not a provider billing limit.
 
 A dry-run manifest is not benchmark evidence, a trial result, or a capability claim.
+
+## Probe manifest
+
+Written to `<run-dir>/manifest.json` by `endpoint-bench probe`.
+
+| Field | Semantics |
+|---|---|
+| `manifest_type` | `probe`. |
+| `deployment_key`, `profile` | Resolved target and profile. |
+| `fixture` | Fixture name, version, and SHA-256. |
+| `counters` | Lifecycle and outcome counts, including `http_attempts`. |
+| `trials_path`, `trials_sha256` | Normalized trial JSONL and its hash. |
+| `warnings` | Non-blocking conditions, such as a missing credential variable. |
+
+## Normalized trial records
+
+Written to `<run-dir>/trials.jsonl`, one JSON object per line, carrying `schema_version` per record.
+
+| Field | Semantics |
+|---|---:|
+| `trial_id` | Stable identifier within the run. |
+| `deployment_key`, `profile_name` | Target identity. |
+| `lifecycle` | Furthest observed state: `planned`, `started`, `transport_completed`, `protocol_completed`, `cancelled`, `skipped`. |
+| `lifecycle_events` | UTC timestamps per observed state. First observation wins. |
+| `outcome` | Terminal outcome, independent of lifecycle. |
+| `outcome_detail` | Machine-readable reason, for example `http_429` or `timeout_after_first_token`. |
+| `http_attempts` | Integer count of wire attempts, preserved separately from trials. |
+| `attempts` | Per-attempt records with status and error type. |
+| `timing` | `ttft_ms` and `duration_ms`, `null` when unobservable. |
+| `usage` | `input_tokens`, `output_tokens`, `total_tokens`, `null` when the provider reported none. |
+| `finish_reason` | Provider finish reason, `null` when absent. |
+| `attribution` | Who is responsible for a failed outcome: `provider`, `model`, `harness`, or `unknown`. A model that answers instead of calling a required tool is `model`, not a broken endpoint. |
+| `token_accounting` | Four distinct token measures; see below. |
+| `notes` | Explicit caveats, such as a client-vs-provider token count discrepancy. |
+
+### Token accounting
+
+Four measures are retained separately and never collapsed:
+
+| Field | Meaning |
+|---|---|
+| `target_input_tokens` | The workload size the profile asked for. |
+| `client_estimated_input_tokens` | What the client tokenizer counted in the serialized request. |
+| `provider_input_tokens` | What the provider reported in `usage`. |
+| `observed_output_tokens` | What the client counted in the response. |
+| `discrepancy_pct` | Relative difference between client estimate and provider report. |
+| `sizing_verified` | `true` within `tolerance_pct`, `false` outside it, `null` when unverifiable. |
+
+`null` is never a pass. A single unverified or out-of-tolerance trial withholds support for token-normalized claims. No correction factor is ever applied to a reported count; the provider's number is preserved verbatim.
+
+Invariants enforced before any trial is counted:
+
+- `successful_trials <= protocol_completed_trials <= started_trials <= planned_trials`;
+- a `success` outcome requires `protocol_completed`;
+- a `skipped` trial may not record HTTP attempts;
+- a `planned`-only trial may not record HTTP attempts;
+- `started` and `transport_completed` require at least one HTTP attempt.
+
+`failed_trials` counts every started trial that neither succeeded nor was cancelled. It is broader than endpoint-attributable failure on purpose: a transport error fails the trial regardless of cause. Per-outcome attribution is reported separately under `outcomes`.
+
+## Run report
+
+Written to `<run-dir>/report.json` by `endpoint-bench run`, and comparable by `endpoint-bench compare`.
+
+| Field | Semantics |
+|---|---|
+| `client_profile` | Explicit client configuration plus a stable `identity` hash. Baseline and affinity-enabled profiles are distinct identities. |
+| `engine` | AIPerf version, summary schema version, and whether the schema was validated before parsing. |
+| `benchmark_failed` | True when the run produced no successful responses. Distinct from an integration failure. |
+| `counters`, `outcomes` | Accounting as above. |
+| `metrics` | Selected AIPerf metrics with `unit` preserved. Absent metrics stay absent. |
+| `token_accounting` | Aggregate sizing verdict. `claims_supported` is false unless every evaluated trial is within tolerance. |
+| `provenance` | Engine, deployment, profile, client, affinity mode, timeout and retry policy, planned-versus-actual request reconciliation, termination, and run-relative artifact locations. |
+| `limitations` | Interpretation restrictions, including unvalidated schema. |
+
+### Workload types
+
+Every run declares exactly one workload type, because they are not interchangeable evidence:
+
+| Value | Meaning |
+|---|---|
+| `synthetic_single_turn` | Generated from a fixed seed. |
+| `recorded_multi_turn_replay` | Recorded trace replay. This is not live agent execution. |
+| `live_turn_conformance` | Deterministic protocol checks, not an intelligence evaluation. |
+| `framework_agent_execution` | Reserved; not implemented in this phase. |
+
+`compare` refuses to produce deltas when deployment, profile, client profile identity, engine version, or schema validation differ. A delta is never a qualification verdict.
 
 ## Planned trial schema
 

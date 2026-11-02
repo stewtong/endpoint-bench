@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 
 class RegistryError(ValueError):
     """Raised when a provider registry or deployment configuration is invalid."""
+
+
+#: Allowed confidence labels for declared capabilities and limits.
+CAPABILITY_STATES = ("unknown", "unverified", "confirmed", "unsupported", "not_applicable")
 
 
 @dataclass(frozen=True)
@@ -23,6 +27,11 @@ class Deployment:
     model_revision: str | None
     context: dict[str, Any]
     pricing: dict[str, Any]
+    capabilities: dict[str, str] = field(default_factory=dict)
+    output_limit_tokens: int | None = None
+    tokenizer: str | None = None
+    cache: dict[str, Any] = field(default_factory=dict)
+    last_verified_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +114,38 @@ def load_registry(path: Path | str) -> Registry:
             model_revision = deployment.get("model_revision")
             if model_revision is not None and not isinstance(model_revision, str):
                 raise RegistryError(f"{context}: `model_revision` must be a string or null")
+
+            capabilities = deployment.get("capabilities", {})
+            if not isinstance(capabilities, dict):
+                raise RegistryError(f"{context}: `capabilities` must be an object")
+            for capability, state in capabilities.items():
+                if state not in CAPABILITY_STATES:
+                    raise RegistryError(
+                        f"{context}: capability `{capability}` has state `{state}`; "
+                        f"expected one of {', '.join(CAPABILITY_STATES)}"
+                    )
+
+            output_limit = deployment.get("output_limit_tokens")
+            if output_limit is not None and (
+                isinstance(output_limit, bool) or not isinstance(output_limit, int)
+                or output_limit <= 0
+            ):
+                raise RegistryError(
+                    f"{context}: `output_limit_tokens` must be a positive integer or null"
+                )
+
+            tokenizer = deployment.get("tokenizer")
+            if tokenizer is not None and not isinstance(tokenizer, str):
+                raise RegistryError(f"{context}: `tokenizer` must be a string or null")
+
+            cache = deployment.get("cache", {})
+            if not isinstance(cache, dict):
+                raise RegistryError(f"{context}: `cache` must be an object")
+
+            last_verified_at = deployment.get("last_verified_at")
+            if last_verified_at is not None and not isinstance(last_verified_at, str):
+                raise RegistryError(f"{context}: `last_verified_at` must be a string or null")
+
             deployments[deployment_key] = Deployment(
                 deployment_key=deployment_key,
                 provider_name=str(provider_name),
@@ -116,6 +157,11 @@ def load_registry(path: Path | str) -> Registry:
                 model_revision=model_revision,
                 context=context_map,
                 pricing=pricing,
+                capabilities=dict(capabilities),
+                output_limit_tokens=output_limit,
+                tokenizer=tokenizer,
+                cache=dict(cache),
+                last_verified_at=last_verified_at,
             )
 
     return Registry(

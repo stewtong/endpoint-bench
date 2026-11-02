@@ -1,8 +1,8 @@
 # Implementation tasks — Agent Endpoint Bench v0.5
 
-**Version:** 0.5.0
+**Version:** 0.5.1
 **Datestamp:** 2026-11-01  
-**Source:** `AGENTS.md` and canonical `BENCHMARK_PLAN.md` v0.5.0.
+**Source:** `AGENTS.md` and canonical `BENCHMARK_PLAN.md` v0.5.1.
 **Status:** Approved execution checklist; not evidence of completed benchmark runs.  
 **Update rule:** Keep gate deliverables, prerequisites, exits, and safety rules aligned with the canonical plan. Preserve historical evidence separately.
 
@@ -20,7 +20,7 @@ This is the execution checklist for coding agents working in this repository. Th
 - Inspect AIPerf session-affinity behavior, default headers, retries, connection reuse, timeouts, request batching, prompt normalization, tokenization, conversation serialization, and cache-control effects.
 - Review provider registry assumptions and current six Token Factory candidates as unverified configuration.
 - Verify AA documentation, endpoint definitions, pagination, Free/Pro tiers, quotas, and applicable data-rights constraints.
-- Record architecture decisions, verified assumptions, unknowns, limitations, and first milestone in `docs/decisions/0001-architecture.md`.
+- Record architecture decisions, verified assumptions, unknowns, limitations, and first milestone in `docs/decisions/0002-architecture-and-aiperf-verification.md`.
 
 **Exit criteria**
 
@@ -28,6 +28,8 @@ This is the execution checklist for coding agents working in this repository. Th
 - CLI choices are validated or explicitly deferred with limitations.
 - No paid calls are made.
 - Offline testing is possible.
+
+**Status (2026-11-01): Gate 0 exit met.** AIPerf 0.13.0 was installed from the PyPI wheel (tag `v0.13.0` equals the pinned commit `794f8bb`), driven entirely offline against a local OpenAI-compatible mock, and recorded in `docs/decisions/0002-architecture-and-aiperf-verification.md`. Key verified facts: the benchmark command is `aiperf profile` (not `run`); credentials work through YAML `${VAR}` substitution with no secret in argv or artifacts; `X-Session-Affinity` is sent by default and must be disabled for a normal-client baseline; there are no automatic request retries; a total-failure run exits non-zero without writing the summary export.
 
 ## Gate 1 — Offline foundation
 
@@ -54,6 +56,8 @@ This is the execution checklist for coding agents working in this repository. Th
 - Malformed configs, unsupported protocols, invalid targets, and invalid budgets fail loudly. Unknown pricing remains explicit in offline dry-run and blocks unattended live execution.
 - No Token Factory/Nebius behavior is hard-coded in core orchestration.
 - Dry-run makes no inference requests.
+
+**Status (2026-11-01): Gate 1 exit met, with AA deferred by owner decision.** Delivered: extended registry schema (capability states, output limit, tokenizer, cache controls, last-verified); five profile families with explicit timeouts and provisional qualification metadata; lifecycle/outcome trial model with separate planned/started/transport/protocol/success/failure/skip/cancel counters and HTTP attempts; in-process OpenAI-compatible mock provider plus deterministic hashable fixture generator; normalized trial JSONL with sanitized logs; `probe`, `report`, and `compare` workflows. Two deliberate exceptions: the initial offline AA parser was deferred to Gate 5 by owner decision, and `report`/`compare` operate on produced evidence rather than a committed synthetic example (still open under Gate 6).
 
 ## Gate 2 — AIPerf and protocol integration
 
@@ -88,7 +92,32 @@ This is the execution checklist for coding agents working in this repository. Th
 - Live-turn conformance contract is implemented and tested offline.
 - Live smoke remains blocked pending explicit authorization.
 
+**Status (2026-11-01): Gate 2 exit met for offline evidence.** Delivered and verified against the pinned engine and a local mock:
+
+- AIPerf 0.13.0 subprocess wrapper: deterministic YAML generation, environment-only credential injection, explicit client profiles, per-request timeout plus process deadline, SIGTERM-then-SIGKILL process-group termination with orphan-worker detection, sanitized stdout/stderr, raw artifact preservation, and version-checked parsing that rejects unsupported schema.
+- Explicit controls and metadata for session affinity, default headers, connection reuse, timeout, tokenization, prompt normalization, and cache controls where AIPerf exposes them. Baseline and affinity-enabled runs are separate result identities.
+- Live-turn tool-call round-trip probe: fixed schema, fragmented streamed arguments, ordered reassembly, identifier and JSON and argument-type validation, synthetic tool result keyed to the correct call id, full-history resubmission, and required terminated continuation. Variants covered offline: multiple calls, missing and inconsistent call ids, invalid JSON, interrupted tool streams, absent tool calls attributed to the model, large tool observations, streaming and non-streaming, malformed and timed-out continuations.
+- Attribution separating provider/protocol failure from model semantic behavior.
+- Cost preflight guards with unknown-pricing fail-closed behavior, numeric-loopback-only local execution, proxy stripping, and redirect refusal.
+- Normalized evidence with four distinct token measures, per-trial attribution, workload-type labelling, and planned-versus-actual request reconciliation.
+- Offline regression tests encoding all ten integration invariants from `docs/decisions/0002-architecture-and-aiperf-verification.md`.
+
+Remaining gaps, stated rather than implied:
+
+- Trace-replay provenance labelling exists as a workload enum and report label, but no replay dataset has been executed through the harness.
+- The raw-to-normalized demonstration runs through the AIPerf wrapper and through the independent probe client as separate evidence streams; there is no single AIPerf-produced tool-call run.
+- Live qualification is not established. One authorized smoke run completed against a single deployment (see below); it is screening evidence, not qualification.
+
+**Live smoke (2026-11-01, owner-authorized).** `deepseek-ai/DeepSeek-V4.1-Flash-1017` on `api.tokenfactory.nebius.com`, 2 requests, smoke profile, baseline client, $0.01 ceiling against a $0.00023 estimate. Both trials succeeded with HTTP 200 and no automatic retries. Observed (n=2, single window, screening only): TTFT 575.5 ms, request latency 699.0 ms, output throughput 44.2 tokens/sec. Raw evidence confirms no `X-Session-Affinity` header was sent and that the credential stayed out of every artifact.
+
+The run also produced the first real token-sizing finding: the provider reported 160 and 165 prompt tokens against AIPerf's built-in tokenizer count of 128, a 25.0% and 28.9% discrepancy. This is a genuine tokenizer mismatch, not a harness defect, and it is why the built-in tokenizer must not be treated as authoritative for a hosted model. `claims_supported` is therefore false for this run and no token-normalized claim is made.
+
+What this does **not** establish: capacity, concurrency behaviour, cache behaviour, long context, tool support on the live endpoint, reliability over time, or any qualification verdict.
+
 ## Gate 3 — Standard performance profiles
+
+**Status (2026-11-01): preparation only; Gate 3 is not entered.** See [`docs/GATE3_PREPARATION.md`](docs/GATE3_PREPARATION.md). Delivered toward this gate: metric-specific validity states so token-sizing failures no longer erase latency evidence; a reproducible local-mock benchmark with agent-shaped Mooncake trace replay and a normalized report; three screening profiles at 1K/10K/32K with a concurrency override; exact dry-run manifests and conservative cost estimates for six screening runs and one live tool-call continuation test. No screening profile has been executed against a live endpoint.
+
 
 **Prerequisites:** Gate 2 offline exit; explicit user authorization for any live execution.
 
@@ -186,20 +215,23 @@ Dollar/request values are syntax examples, not spending authorization. Reject `-
 
 ## Gate 6 — Public-readiness and engineering quality
 
-**Status:** Pre-alpha source foundation delivered on this branch; release and benchmark MVP remain distinct.
+**Status (2026-11-01):** Pre-alpha source foundation delivered. Gate 6 items below are re-verified against current behavior; release and benchmark MVP remain distinct.
 
 - [x] Add a Python 3.13 package, CLI entry point, registry validation, and network-free dry-run manifest.
-- [x] Add fail-closed behavior for missing run mode and unimplemented `--execute`.
+- [x] Fail closed on a missing run mode. `--execute` is now implemented and still fails closed: request ceilings are mandatory, and non-loopback targets require explicit authorization, verified pricing, and a cost ceiling the conservative estimate must fit under.
 - [x] Add accurate README, methodology, result contract, development guide, contribution guide, security policy, changelog, and synthetic example.
 - [x] Add offline tests, GitHub Actions CI, pinned actions, locked dependencies, and least-privilege workflow permissions.
 - [x] Obtain owner license approval and add the MIT `LICENSE`.
 - [x] Verify the offline workflow in an isolated local checkout; macOS compatibility is verified only for that local environment.
 - [ ] Complete Linux clean-clone verification and observe a passing GitHub Actions run after the owner authorizes a push.
-- [ ] Implement a synthetic report example and schema validation for normalized trial artifacts.
+- [x] Validate normalized trial artifacts: lifecycle/outcome invariants, counter nesting, and per-record schema versioning are enforced before any trial is counted.
+- [ ] Commit a synthetic report example alongside the existing synthetic dry-run manifest.
 
-The pre-alpha source milestone is ready for release review after license approval and CI verification; live inference is not required for it. The benchmark MVP remains gated on AIPerf integration, conformance probes, normalized live evidence, reports, and at least one authorized live experiment. Expanded cache, long-context, reliability, and AA work remains a later milestone.
+The pre-alpha source milestone is ready for release review after license approval and CI verification; live inference is not required for it.
 
-**Exit:** A fresh outsider can install, run the offline example, inspect the manifest, and understand that no benchmark evidence exists. A pre-alpha release additionally requires approved licensing and verified CI. A benchmark MVP additionally requires the Gate 2/3 live evidence listed above.
+The benchmark MVP's implementation criteria are now met offline: AIPerf integration, streaming and tool-call conformance probes, normalized evidence, reports, and one authorized live experiment all exist. What remains is not implementation but evidence at scale: repeatable profiles exercised with enough samples and temporal coverage to support a qualification verdict. Expanded cache, long-context, reliability, and AA work remains a later milestone.
+
+**Exit:** A fresh outsider can install, run the offline example, inspect the manifest, and understand that no endpoint has been qualified. One authorized 2-request smoke run is labelled as screening evidence only. A pre-alpha release additionally requires approved licensing and verified CI. A benchmark MVP additionally requires the Gate 2/3 live evidence listed above.
 
 ## Useful references
 

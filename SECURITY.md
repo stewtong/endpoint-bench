@@ -8,7 +8,7 @@ Report privately through [GitHub security advisories](https://github.com/stewton
 
 ## Supported configuration
 
-Only the latest default branch and tagged releases are supported. The project is pre-release; live inference execution is intentionally unimplemented.
+Only the latest default branch and tagged releases are supported. The project is pre-release. Live execution is implemented and fail-closed: non-loopback targets require explicit `--authorize-live`, verified pricing, a request ceiling, and a dollar ceiling the conservative cost estimate must fit under.
 
 ## Handling credentials
 
@@ -20,13 +20,14 @@ Only the latest default branch and tagged releases are supported. The project is
 ## Execution safeguards
 
 - Offline workflows must not perform inference requests.
-- `--execute` fails closed unless live execution has been implemented and explicitly authorized.
+- `--execute` fails closed: it requires request ceilings, and non-loopback targets additionally require explicit authorization, verified pricing, and a cost ceiling.
+- Local unattended execution is restricted to explicit numeric loopback addresses; hostnames, proxies, and redirects are not trusted.
 - Unknown pricing is not treated as zero cost.
 - CI must not receive provider credentials.
 - External pull-request workflows must not run paid or live inference.
 - API responses and provider metadata are untrusted input; response text is never executed.
 
-As of 2026-11-01, GitHub Dependabot vulnerability alerts and secret scanning were observed disabled in repository settings. The owner should enable both before public promotion. The GitHub security-advisory URL above remains the private reporting path; do not open a public issue for sensitive vulnerabilities.
+As of 2026-11-02, Dependabot vulnerability alerts are **enabled**. Secret scanning could not be enabled: GitHub returns `Secret scanning is not available for this repository` because the repository is private and secret scanning requires GitHub Advanced Security on private repositories. It becomes available for free if the repository is made public. Until then, secret detection relies on review and on the credential handling rules above. The GitHub security-advisory URL above remains the private reporting path; do not open a public issue for sensitive vulnerabilities.
 
 ## Data handling
 

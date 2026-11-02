@@ -12,13 +12,12 @@ This project focuses on those operational properties. It treats broad model qual
 
 ## Relationship to other projects
 
-- **AIPerf** is planned as the primary performance/load/trace-replay engine.
-- **Artificial Analysis (AA)** is a planned, separately stored external reference for model capability and intelligence data.
-- Agent Endpoint Bench plans to add provider configuration, workload profiles, protocol conformance checks, operational qualification, reproducible evidence, and comparative reporting.
+- **AIPerf 0.13.0** is the pinned performance, load, and trace-replay engine. It is driven as a subprocess and is not a project dependency.
+- **Artificial Analysis (AA)** is a separately stored external reference for model capability data. AA import is not implemented.
 
-The current implementation is an early, offline-only foundation. It does not yet perform live benchmarking, AIPerf orchestration, tool-call probing, cache measurement, long-context testing, or AA synchronization.
+The implementation covers provider configuration, workload profiles, AIPerf orchestration, protocol conformance probes, normalized evidence, and comparative reporting. Cache measurement, long-context qualification, and AA synchronization remain unimplemented.
 
-**Project version:** software `0.0.1` (pre-alpha); specification/methodology `0.5.0`; result schema `0.1.0`; profile schema `1.0`; AIPerf target `0.13.0` (not yet integrated).
+**Project version:** software `0.0.1` (pre-alpha); specification/methodology `0.5.1`; result schema `0.1.0`; profile schema `1.0`; pinned engine AIPerf `0.13.0`.
 
 ## Current status
 
@@ -26,22 +25,29 @@ The current implementation is an early, offline-only foundation. It does not yet
 |---|---|
 | Provider registry validation | Implemented |
 | Offline dry-run manifest | Implemented |
+| Normalized trial evidence (lifecycle/outcome/attempts) | Implemented |
+| Local OpenAI-compatible mock provider | Implemented |
+| Streaming conformance probes | Implemented |
+| AIPerf 0.13.0 subprocess integration | Implemented (offline-verified) |
+| Report and comparison commands | Implemented (offline evidence only) |
 | CLI entry point | Implemented |
 | Tests and CI | Implemented |
-| AIPerf integration | Planned |
-| Streaming conformance probes | Planned |
-| Tool-call round-trip probes | Planned |
+| Tool-call round-trip probes | Implemented (offline-verified) |
+| Process deadline and cleanup | Implemented |
+| Numeric-loopback execution guard | Implemented |
 | Cache benchmarks | Planned |
 | Concurrency and stability benchmarks | Planned |
 | Long-context benchmarks | Planned |
 | AA metadata import | Planned |
-| Live endpoint execution | Planned and intentionally disabled |
+| Live paid endpoint execution | Implemented; one authorized 2-request smoke run completed |
 
-There are no benchmark results yet. Do not interpret generated manifests as measured evidence.
+There are no benchmark results yet. One authorized 2-request smoke run against a single deployment exists as screening evidence only; it is not a qualification verdict and supports no capacity, reliability, cache, or long-context claim. Offline evidence comes from a local mock. Do not interpret generated manifests, probe evidence, or reports as endpoint qualification.
+
+No endpoint has been qualified, failed, or measured to a standard profile. Qualification is a later gate.
 
 ## Quickstart
 
-The only verified workflow today is offline:
+The verified workflows are offline (no provider contact).
 
 ```bash
 git clone https://github.com/stewtong/endpoint-bench.git
@@ -59,25 +65,86 @@ This requires Python 3.13. `uv sync` creates an isolated environment; it does no
 
 The dry-run manifest records the resolved target, profile, configuration hashes, planned request/token exposure, and explicit evidence that no request was sent. Cost estimation is intentionally `null` in the example because its synthetic pricing is unverified.
 
-Unknown pricing is allowed for registry validation and dry-run; it is represented as `null`, never as zero. `--execute` fails closed. Live inference has not been implemented.
+Unknown pricing is allowed for registry validation and dry-run; it is represented as `null`, never as zero. `--execute` fails closed: it requires `--max-requests` within the profile's plan, and for non-loopback targets it additionally requires `--authorize-live`, verified per-million pricing, and a `--max-usd` ceiling that the computed conservative estimate must fit under. One authorized smoke run has been executed; see [`IMPLEMENTATION_TASKS.md`](IMPLEMENTATION_TASKS.md) for its evidence and limitations.
+
+## Run a full benchmark locally
+
+A complete AIPerf benchmark with agent-shaped trace replay needs no credentials and no network beyond loopback:
+
+```bash
+uv venv .venv-aiperf --python 3.13
+VIRTUAL_ENV=.venv-aiperf uv pip install aiperf==0.13.0
+
+# terminal 1: the mock provider
+uv run endpoint-bench mock --port 18080
+
+# terminal 2: replay a synthetic multi-turn agent trace
+uv run endpoint-bench run \
+  --config examples/local-benchmark/registry.json \
+  --target local-mock-agent-replay \
+  --trace-file examples/local-benchmark/agent-trace.jsonl \
+  --execute --max-requests 12
+uv run endpoint-bench report --run runs/<run_id>
+```
+
+The trace is synthetic and deterministic: four agent sessions, three turns each, growing context. The report labels the workload `recorded_multi_turn_replay` and states that replay is not live agent execution. See [`docs/GATE3_PREPARATION.md`](docs/GATE3_PREPARATION.md) for the verified result and for the prepared live experiments.
+
+## Offline conformance evidence
+
+The probe path needs no credentials and no AIPerf installation. Its passing conformance matrix — streaming start, chunks, usage, finish reason, truncation, interruption, timeouts before and after first token, 429/5xx, malformed payloads, and missing usage — runs entirely against a local mock in the test suite:
+
+```bash
+uv run pytest tests/test_conformance.py
+```
+
+The same command works against any configured target:
+
+```bash
+uv run endpoint-bench probe --target <deployment_key> --profile smoke --requests 2
+```
+
+It writes a run directory containing `manifest.json`, `trials.jsonl`, and hashes. Against the checked-in example target this records `client_error` trials, because that mock URL is deliberately unreachable; the resulting evidence documents a transport failure rather than a passing probe. Trial records separate lifecycle from outcome and count HTTP attempts separately from trials.
+
+Full AIPerf integration requires the pinned engine environment, which is not part of `uv sync`:
+
+```bash
+uv venv .venv-aiperf --python 3.13
+VIRTUAL_ENV=.venv-aiperf uv pip install aiperf==0.13.0
+uv run endpoint-bench run --target <deployment_key> --profile smoke \
+  --execute --max-requests 2
+uv run endpoint-bench report --run runs/<run_id>
+```
+
+Against the checked-in example target this exits non-zero and records a **benchmark failure**, because that mock URL is deliberately unreachable. That is the intended demonstration of failure handling: the run still writes normalized trials, raw evidence, and a report, and it does not report zeros as measurements. A passing AIPerf run requires a reachable target.
+
+The complete multi-turn tool-call exchange is exercised with:
+
+```bash
+uv run endpoint-bench probe --target <deployment_key> --profile smoke \
+  --scenario tool-round-trip --requests 1
+```
+
+One logical trial, two HTTP attempts: the tool call plus the continuation. The passing matrix — fragmented argument reassembly, multiple calls, missing and inconsistent call ids, invalid JSON, interrupted streams, absent tool calls attributed to the model, large observations, and malformed or timed-out continuations — runs offline in `tests/test_tool_conformance.py`. Against the checked-in example target the probe records a `client_error`, because that URL is deliberately unreachable.
+
+AIPerf 0.13.0 sends `X-Session-Affinity` by default, which can improve cache locality and make an endpoint look faster than it would for an ordinary client. Baseline runs disable it and verify its absence at the receiving server; affinity experiments are separate result identities. See [`docs/decisions/0002-architecture-and-aiperf-verification.md`](docs/decisions/0002-architecture-and-aiperf-verification.md).
 
 ## Configuration
 
 See [`configs/registry.example.json`](configs/registry.example.json). A provider contains a URL, protocol, region, non-secret credential environment-variable name, and one or more deployments. The registry never stores credentials.
 
-Supply credentials only in the environment when live execution is implemented. Do not put them in files, logs, shell history, or process arguments. Current workflows require no credentials.
+Supply credentials only through the environment variable named in the registry. They are injected into generated AIPerf configuration as a `${VAR}` reference, so no secret enters a file, a command line, or an artifact. Offline workflows require no credentials.
 
 ## Benchmark profiles
 
-Planned profile families are described in [`BENCHMARK_PLAN.md`](BENCHMARK_PLAN.md) and [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md):
+Five profile families ship in [`configs/profiles/`](configs/profiles). Each declares request count, target input size, output ceiling, concurrency, an explicit timeout, and a token-sizing tolerance:
 
-- **Smoke:** protocol and configuration compatibility.
-- **Quick:** low-cost screening.
-- **Standard:** repeated performance and concurrency observations.
-- **Long context:** accepted-versus-demonstrated context, up to a safe and explicitly authorized maximum.
-- **Reliability:** multi-window stability and failure accounting.
+- **Smoke:** protocol and configuration compatibility, 2 requests.
+- **Quick:** low-cost screening, 20 requests.
+- **Standard:** repeated performance and concurrency observations, 200 requests.
+- **Long context:** accepted-versus-demonstrated context, requiring explicit authorization.
+- **Reliability:** multi-window stability and failure accounting, 300 requests.
 
-Low-cost screening is not endpoint qualification. Qualification requires sufficient samples, temporal coverage, and profile-specific thresholds.
+Thresholds are marked provisional and uncalibrated. Low-cost screening is not endpoint qualification, which requires sufficient samples, temporal coverage, and profile-specific thresholds.
 
 ## Interpreting results
 
@@ -90,8 +157,9 @@ Never compare endpoints across undisclosed model revisions, client settings, tra
 
 ## Limitations
 
-- No public endpoint has been measured by this repository.
-- AIPerf, conformance probes, caching, long context, and AA import are not implemented.
+- No endpoint has been qualified. One 2-request live smoke run is screening evidence only.
+- Cache measurement, long-context qualification, trace replay, and AA import are not implemented.
+- The built-in tokenizer does not match every hosted model. On the single live run it undercounted prompt tokens by 25-29% against provider-reported usage, which withholds token-normalized claims.
 - Public shared capacity and provider revisions can change independently of model identity.
 - API telemetry, token accounting, cache state, and context behavior vary by provider.
 - Large-context behavior cannot be inferred safely from an HTTP 200 response.
