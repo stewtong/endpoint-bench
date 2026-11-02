@@ -11,6 +11,7 @@ from pathlib import Path
 from . import RESULT_SCHEMA_VERSION, __version__
 from .aiperf import (
     BASELINE_CLIENT,
+    BASELINE_SERVER_ACCOUNTING,
     AiperfError,
     build_benchmark_config,
     dump_yaml,
@@ -22,7 +23,7 @@ from .cost import cost_preflight, estimate_cost_usd
 from .dry_run import build_dry_run_manifest
 from .fixtures import generate_fixture
 from .network_guard import NetworkGuardError, assert_loopback, is_loopback
-from .probes import ProbeConfig, probe, probe_tool_round_trip
+from .probes import DEFAULT_TOOL_PROMPT, ProbeConfig, probe, probe_tool_round_trip
 from .profiles import Profile, ProfileError, load_profile
 from .registry import Deployment, RegistryError, load_registry
 from .report import (
@@ -91,6 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="emit the plan and cost estimate without sending any request",
+    )
+    probe_parser.add_argument(
+        "--authorize-live",
+        action="store_true",
+        help="permit a non-loopback target and credential transmission",
     )
     probe_parser.add_argument(
         "--run-dir", type=Path, default=Path("runs"), help="parent directory for run artifacts"
@@ -372,15 +378,20 @@ def _command_probe(arguments: argparse.Namespace) -> int:
         )
         return 0
 
-    if not is_loopback(deployment.base_url):
+    live = not is_loopback(deployment.base_url)
+    if live and not arguments.authorize_live:
         raise AiperfError(
-            "probe only runs against explicit numeric loopback targets; "
-            f"`{deployment.base_url}` is not one. Use the authorized live workflow instead."
+            "probe only runs against explicit numeric loopback targets without "
+            f"--authorize-live; `{deployment.base_url}` is not one"
         )
-    if api_key:
+    if live and not api_key:
         raise AiperfError(
-            "probe refuses to transmit a credential; conformance probes use an "
-            "unauthenticated local mock"
+            f"--authorize-live requires {deployment.credential_env_name} to be set"
+        )
+    if not live and api_key:
+        raise AiperfError(
+            "probe will not transmit a credential to a loopback target; "
+            "the local mock is unauthenticated"
         )
 
     trials: list[Trial] = []
@@ -392,7 +403,7 @@ def _command_probe(arguments: argparse.Namespace) -> int:
         )
         if arguments.scenario == "tool-round-trip":
             probe_tool_round_trip(
-                config, api_key=api_key, prompt=fixture.prompts[index].text, trial=trial
+                config, api_key=api_key, prompt=DEFAULT_TOOL_PROMPT, trial=trial
             )
         else:
             probe(config, api_key=api_key, prompt=fixture.prompts[index].text, trial=trial)
@@ -414,6 +425,11 @@ def _command_probe(arguments: argparse.Namespace) -> int:
         "token_accounting": token_sizing_summary(trials),
         "trials_path": str(trials_path),
         "trials_sha256": trials_sha,
+        "authorization": {
+            "live_authorized": live,
+            "credential_env_name": deployment.credential_env_name if live else None,
+            "cost_preflight": preflight,
+        },
         "warnings": warnings,
     }
     (run_dir / "manifest.json").write_text(
@@ -449,7 +465,11 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
             print(f"error: {reason}", file=sys.stderr)
         return 2
 
-    client = BASELINE_CLIENT
+    client = (
+        BASELINE_SERVER_ACCOUNTING
+        if arguments.token_accounting == "server"
+        else BASELINE_CLIENT
+    )
     secrets, warnings = _credential_env(deployment)
     # A loopback mock has no account, so requiring a credential would make the
     # contributor demo unrunnable. Non-loopback targets still must present one.

@@ -21,6 +21,14 @@ All notable changes are documented here. This project distinguishes the software
 - `--concurrency` override on `run`, validated against the profile's request count.
 - `screening-1k`, `screening-10k`, `screening-32k` profiles.
 - Expanded CI: separate lint, test, and offline-workflow jobs plus an opt-in engine-integration job that installs the pinned AIPerf release.
+- `probe --authorize-live` for explicitly authorized non-loopback conformance probes, recording the authorization and cost preflight in the manifest.
+- `run --token-accounting server` to account tokens from provider usage instead of the built-in tokenizer, with the resulting limitation recorded in the report.
+- `scripts/verify.sh` for the full local verification suite and `scripts/push-and-open-pr.sh` for the CI push path.
+
+### Fixed
+
+- Truncation by our own output ceiling was reported as `tool_call_absent` with attribution `model`. It is now `output_truncated` with attribution `harness`; a model must not be blamed for a limit we imposed.
+- Tool-call probes raised the output budget to a 512-token floor and use a tool-directed instruction. Reasoning deltas counted against a text-sized budget and truncated the call before it appeared.
 - Cost preflight that computes a conservative upper-bound estimate from verified per-million rates and refuses execution when the estimate exceeds `--max-usd` or when rates are missing.
 - HTTP status joined from raw evidence by request id, so attempt records carry the observed status.
 - OpenAI-style `/v1` base URLs are normalised for AIPerf, which appends the endpoint path itself.

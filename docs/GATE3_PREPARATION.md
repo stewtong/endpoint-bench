@@ -118,7 +118,18 @@ uv run endpoint-bench probe \
 
 This is the smallest test that can establish whether the endpoint accepts a tool result keyed to a call id and returns a terminated continuation. It cannot establish tool quality, and it does not test multi-call or fragmented-argument behaviour on a live endpoint.
 
-Blocking prerequisite: the `probe` command currently refuses non-loopback targets by design. Running this against a live endpoint requires either an explicit authorization path for probes or execution through the `run` workflow. That decision is not made.
+**Executed 2026-11-02 after owner authorization.** `probe --authorize-live` was added, permits a non-loopback target only with an explicit flag and a present credential, and records the authorization and cost preflight in the manifest.
+
+Result: **1 trial, 2 HTTP attempts, both 200, `tool_round_trip_completed`.** DeepSeek V4.1 Flash accepts a tool result keyed to the call id and returns a terminated continuation. This remains a protocol-compatibility result, not an assessment of tool-use quality.
+
+Two harness defects were found and fixed by running it:
+
+1. A tool call emitted ~46 reasoning deltas before the arguments, and those tokens count against `max_completion_tokens`. The smoke profile's 32-token budget truncated the turn before any call appeared, which was initially misreported as `tool_call_absent` with attribution `model`. Truncation by our own ceiling is now `output_truncated` with attribution `harness`, and tool probes raise the budget to a 512-token floor.
+2. The generic synthetic fixture prompt was ambiguous, so a reasoning model spent its whole budget deliberating. Tool probes now use a purpose-built instruction; the generic fixture was measuring the fixture, not the endpoint.
+
+### Token accounting source
+
+`run --token-accounting server` sets AIPerf's `use_server_token_count`, taking token counts from provider `usage` instead of the built-in tokenizer. This makes the throughput denominator authoritative for the served model, which is what unblocks token-normalized metrics on an endpoint whose tokenizer does not match `builtin`. It does not verify that the delivered workload matched the requested target size, and the report states that limitation explicitly. The encoding appears in `client_profile.token_accounting_source`.
 
 ### 3b. 1K / 10K / 32K screening at concurrency 1 and 2
 

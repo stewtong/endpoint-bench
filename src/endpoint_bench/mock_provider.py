@@ -37,6 +37,7 @@ class MockBehavior(StrEnum):
     TOOL_CALL_INVALID_JSON = "tool_call_invalid_json"
     TOOL_CALL_INTERRUPTED = "tool_call_interrupted"
     TOOL_CALL_ABSENT = "tool_call_absent"
+    TOOL_CALL_TRUNCATED = "tool_call_truncated"
 
     CONTINUATION_MALFORMED = "continuation_malformed"
     CONTINUATION_HANG = "continuation_hang"
@@ -266,6 +267,11 @@ class MockProvider:
             time.sleep(self.hang_seconds)
             self._close_quietly(handler)
             return
+        if behavior is MockBehavior.TOOL_CALL_TRUNCATED:
+            # Output ceiling hit before a usable call was emitted: no tool_calls,
+            # finish_reason "length".
+            self._write_truncated_stream(handler, body)
+            return
         if behavior is MockBehavior.TOOL_CALL_ABSENT:
             # The model answers in prose instead of calling a tool. This is a
             # semantic choice, not an infrastructure fault.
@@ -289,6 +295,19 @@ class MockProvider:
             return
 
         self._write_completion(handler, body, content="".join(self.tokens), stream=stream)
+
+    def _write_truncated_stream(
+        self, handler: BaseHTTPRequestHandler, body: dict[str, Any]
+    ) -> None:
+        model = body.get("model", self.model_id)
+        self._open_stream(handler)
+        self._emit(handler, self._chunk(model, delta={"role": "assistant"}))
+        final = self._chunk(model, delta={})
+        final["choices"][0]["finish_reason"] = "length"
+        final["usage"] = self._usage(body)
+        self._emit(handler, final)
+        handler.wfile.write(b"data: [DONE]\n\n")
+        handler.wfile.flush()
 
     def _write_redirect(self, handler: BaseHTTPRequestHandler) -> None:
         handler.send_response(302)

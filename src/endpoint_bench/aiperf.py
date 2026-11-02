@@ -66,6 +66,10 @@ class ClientProfile:
     enable_server_metrics: bool = False
     enable_gpu_telemetry: bool = False
     wait_for_model_timeout_s: float = 0.0
+    #: Account tokens from provider `usage` instead of client tokenization.
+    #: This makes the throughput denominator authoritative for the served model,
+    #: but it stops verifying that the delivered workload matched the target size.
+    use_server_token_count: bool = False
 
     def env(self) -> dict[str, str]:
         """Transport environment that must accompany every invocation."""
@@ -86,6 +90,10 @@ class ClientProfile:
             "enable_server_metrics": self.enable_server_metrics,
             "enable_gpu_telemetry": self.enable_gpu_telemetry,
             "wait_for_model_timeout_s": self.wait_for_model_timeout_s,
+            "use_server_token_count": self.use_server_token_count,
+            "token_accounting_source": (
+                "provider_usage" if self.use_server_token_count else "client_tokenizer"
+            ),
             "sends_affinity_header": self.session_affinity,
         }
 
@@ -95,6 +103,13 @@ class ClientProfile:
 
 
 BASELINE_CLIENT = ClientProfile(name="baseline-normal-client", session_affinity=False)
+#: Same client, but token counts come from provider usage rather than the built-in
+#: tokenizer. Required whenever the client tokenizer does not match the served model.
+BASELINE_SERVER_ACCOUNTING = ClientProfile(
+    name="baseline-normal-client-server-accounting",
+    session_affinity=False,
+    use_server_token_count=True,
+)
 AFFINITY_CLIENT = ClientProfile(name="affinity-enabled-experiment", session_affinity=True)
 
 
@@ -136,6 +151,7 @@ def build_benchmark_config(
         "streaming": streaming,
         "timeout": client.request_timeout_s,
         "connection_reuse": client.connection_reuse,
+        "use_server_token_count": client.use_server_token_count,
     }
     if credential_env_name:
         endpoint["api_key"] = f"${{{credential_env_name}}}"

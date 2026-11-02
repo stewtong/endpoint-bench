@@ -320,6 +320,14 @@ def build_report(
             "AIPerf schema was not validated for this run; only error evidence "
             "is trustworthy and no performance claim is supported."
         )
+    if client_profile.use_server_token_count:
+        limitations.append(
+            "Token counts come from provider-reported usage, so the throughput "
+            "denominator is authoritative for the served model. The client "
+            "tokenizer was not used, so delivered workload size is not "
+            "independently verified against the requested target."
+        )
+
     if results.benchmark_failed:
         limitations.append(
             "The benchmark produced no successful responses. This is a benchmark "

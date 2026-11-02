@@ -27,7 +27,7 @@ Only the latest default branch and tagged releases are supported. The project is
 - External pull-request workflows must not run paid or live inference.
 - API responses and provider metadata are untrusted input; response text is never executed.
 
-As of 2026-11-01, GitHub Dependabot vulnerability alerts and secret scanning were observed disabled in repository settings. The owner should enable both before public promotion. The GitHub security-advisory URL above remains the private reporting path; do not open a public issue for sensitive vulnerabilities.
+As of 2026-11-02, Dependabot vulnerability alerts are **enabled**. Secret scanning could not be enabled: GitHub returns `Secret scanning is not available for this repository` because the repository is private and secret scanning requires GitHub Advanced Security on private repositories. It becomes available for free if the repository is made public. Until then, secret detection relies on review and on the credential handling rules above. The GitHub security-advisory URL above remains the private reporting path; do not open a public issue for sensitive vulnerabilities.
 
 ## Data handling
 

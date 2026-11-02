@@ -247,3 +247,26 @@ def test_tool_probe_emits_inspectable_normalized_evidence() -> None:
     assert "token_accounting" in record
     # Round-trippable as JSONL evidence.
     json.dumps(record)
+
+
+def test_output_limit_truncation_is_a_harness_outcome_not_model_choice() -> None:
+    """Our own output ceiling is not evidence that the model refused to call."""
+    trial, _ = run_tool_probe(MockBehavior.TOOL_CALL_TRUNCATED)
+
+    assert trial.outcome is OutcomeState.OUTPUT_TRUNCATED
+    assert trial.outcome_detail == "tool_call_truncated_by_output_limit"
+    assert trial.attribution == "harness"
+
+
+def test_tool_probe_raises_a_small_output_budget_to_the_tool_minimum() -> None:
+    """A text-sized output cap must not silently truncate the call."""
+    from endpoint_bench.probes import TOOL_CALL_MIN_OUTPUT_TOKENS
+
+    # Ask for a 32-token budget, the size that truncated the live call.
+    trial, mock = run_tool_probe(
+        MockBehavior.TOOL_CALL_STREAM, config_options={"max_output_tokens": 32}
+    )
+
+    assert trial.outcome is OutcomeState.SUCCESS
+    sent = mock.inference_requests[0].body
+    assert sent["max_completion_tokens"] >= TOOL_CALL_MIN_OUTPUT_TOKENS

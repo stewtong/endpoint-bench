@@ -3,7 +3,7 @@ from __future__ import annotations
 import http.client
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import urlparse
 
@@ -77,6 +77,26 @@ _TOOL_ARGUMENT_TYPES: dict[str, dict[str, type]] = {
 
 #: Synthetic tool observation returned to the endpoint on the second turn.
 DEFAULT_TOOL_RESULT = '{"ok": true, "bytes_read": 42}'
+
+#: Purpose-built instruction for tool-call probes. A generic synthetic fixture is
+#: ambiguous, and an ambiguous prompt makes a reasoning model spend its whole
+#: output budget deliberating instead of emitting the call. That measures the
+#: fixture, not the endpoint.
+DEFAULT_TOOL_PROMPT = (
+    "Read the file /tmp/example.txt using the provided tool and report its size. "
+    "Call the tool now; do not ask for clarification."
+)
+
+#: Minimum tool-directed prompt length is not meaningful; keep the instruction short.
+
+#: Minimum output budget for a tool-call turn.
+#:
+#: Reasoning-capable models emit reasoning deltas before the call, and those
+#: tokens count against `max_completion_tokens`. Observed on DeepSeek V4.1 Flash:
+#: ~46 reasoning chunks preceded a 10-token tool call, so a 32-token text budget
+#: truncated the turn entirely and a 256-token budget was marginal. A profile
+#: tuned for short text replies must not silently decide this.
+TOOL_CALL_MIN_OUTPUT_TOKENS = 512
 
 
 def parse_base_url(base_url: str) -> tuple[str, str, int | None]:
@@ -512,7 +532,13 @@ def probe_tool_round_trip(
     One logical trial, two HTTP attempts. Attempt counts stay observable.
     """
     messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
-    first_payload = _base_payload(config, messages)
+    tool_config = replace(
+        config,
+        max_output_tokens=max(
+            config.max_output_tokens or 0, TOOL_CALL_MIN_OUTPUT_TOKENS
+        ),
+    )
+    first_payload = _base_payload(tool_config, messages)
     first_payload["tools"] = list(TOOL_DEFINITIONS)
     first_payload["tool_choice"] = tool_choice
 
@@ -522,7 +548,7 @@ def probe_tool_round_trip(
     if response is None:
         return trial
 
-    calls, problem = _collect_tool_calls(config, response)
+    calls, problem, finish_reason = _collect_tool_calls(config, response)
     if problem is not None:
         outcome = (
             OutcomeState.STREAM_INTERRUPTED
@@ -531,6 +557,16 @@ def probe_tool_round_trip(
         )
         return _fail(trial, outcome, problem, started, "provider")
     if not calls:
+        if finish_reason == "length":
+            # Our own output ceiling cut the turn off before a usable call could
+            # be emitted. Blaming the model here would be wrong.
+            return _fail(
+                trial,
+                OutcomeState.OUTPUT_TRUNCATED,
+                "tool_call_truncated_by_output_limit",
+                started,
+                "harness",
+            )
         # A capable model may simply answer instead of calling a tool. That is a
         # semantic outcome, not an infrastructure fault.
         return _fail(
@@ -568,7 +604,7 @@ def probe_tool_round_trip(
     if history_problem is not None:
         return _fail(trial, OutcomeState.PROTOCOL_FAILURE, history_problem, started, "harness")
 
-    second_payload = _base_payload(config, messages)
+    second_payload = _base_payload(tool_config, messages)
     second_payload["tools"] = list(TOOL_DEFINITIONS)
     response, started = _send(
         config,
@@ -586,20 +622,25 @@ def probe_tool_round_trip(
 
 def _collect_tool_calls(
     config: ProbeConfig, response: Any
-) -> tuple[list[AssembledToolCall], str | None]:
-    """Parse the first turn into assembled tool calls, or return a problem."""
+) -> tuple[list[AssembledToolCall], str | None, str | None]:
+    """Parse the first turn into assembled tool calls.
+
+    Returns (calls, problem, finish_reason). The finish reason is returned so a
+    caller can tell "the model chose not to call" apart from "our own output
+    ceiling cut the call off".
+    """
     if not config.streaming:
         try:
             raw = response.read()
         except (TimeoutError, OSError, http.client.HTTPException):
-            return [], "unterminated_tool_response"
+            return [], "unterminated_tool_response", None
         try:
             document = json.loads(raw)
         except json.JSONDecodeError:
-            return [], "malformed_json"
+            return [], "malformed_json", None
         choice = _first_choice(document)
         if choice is None:
-            return [], "missing_choices"
+            return [], "missing_choices", None
         message = choice.get("message") or {}
         slots: dict[int, AssembledToolCall] = {}
         for index, call in enumerate(message.get("tool_calls") or []):
@@ -614,7 +655,8 @@ def _collect_tool_calls(
             if isinstance(function.get("arguments"), str):
                 slot.argument_fragments.append(function["arguments"])
             slots[index] = slot
-        return _finalize_calls(slots)
+        calls, problem = _finalize_calls(slots)
+        return calls, problem, choice.get("finish_reason")
 
     slots = {}
     saw_done = False
@@ -623,7 +665,7 @@ def _collect_tool_calls(
         try:
             line = response.readline()
         except (TimeoutError, OSError, http.client.HTTPException):
-            return [], "unterminated_tool_stream"
+            return [], "unterminated_tool_stream", None
         if not line:
             break
         text = line.decode("utf-8", errors="replace").strip()
@@ -636,7 +678,7 @@ def _collect_tool_calls(
         try:
             chunk = json.loads(data)
         except json.JSONDecodeError:
-            return [], "malformed_sse_json"
+            return [], "malformed_sse_json", None
         choice = _first_choice(chunk)
         if choice is not None:
             if choice.get("finish_reason"):
@@ -644,8 +686,9 @@ def _collect_tool_calls(
             _assemble_from_delta(slots, choice.get("delta") or {})
 
     if not saw_done or finish_reason is None:
-        return [], "unterminated_tool_stream"
-    return _finalize_calls(slots)
+        return [], "unterminated_tool_stream", finish_reason
+    calls, problem = _finalize_calls(slots)
+    return calls, problem, finish_reason
 
 
 def _finalize_calls(
