@@ -1,0 +1,238 @@
+{
+  "schema_version": "1.0",
+  "name": "10k-slo-contract",
+  "doc_version": "1.1",
+  "datestamp": "2026-11-01",
+  "status": "draft_unratified",
+  "scope": {
+    "workload": "synthetic single-turn, 10,240 requested input tokens, 1024-token output ceiling",
+    "concurrency_levels": [
+      1,
+      2
+    ],
+    "deployment_key": "tf-deepseek-v4.1-flash-1017",
+    "client_profile": "baseline-normal-client-server-accounting",
+    "explicitly_out_of_scope": [
+      "concurrency above 2",
+      "context above 32,768",
+      "cache behaviour",
+      "multi-provider comparison",
+      "reliability over hours or days",
+      "any claim about model capability"
+    ]
+  },
+  "design_principle": {
+    "statement": "Data-quality gates and performance thresholds are different kinds of statement and must not be derived the same way.",
+    "explanation": "A data-quality gate asks whether the measurement can be trusted. It can be defined now from measurement properties alone, and it is objective: a run that truncated 40% of its responses has censored latency whatever the endpoint's speed. A performance threshold asks whether the endpoint is good enough, which is a business requirement that the benchmark cannot invent for itself. Deriving a performance threshold from the same run that is being judged makes the verdict circular, which is the same error this project already corrected once in token sizing.",
+    "consequence": "While any performance threshold below is `null`, the strongest available verdict is `inconclusive`."
+  },
+  "data_quality_gates": {
+    "rationale": "Gates constrain evidence needed for the stated workload. They do not convert genuine endpoint errors into missing evidence. The sample floor is a conservative minimum, not proof of adequate tail precision.",
+    "gates": [
+      {
+        "id": "dq.truncation_rate",
+        "metric": "ceiling_truncated / protocol_completed_trials",
+        "operator": "<=",
+        "threshold": 0.0,
+        "on_failure": "inconclusive",
+        "reason": "Any ceiling censoring prevents treating the unadjusted sample mean or percentiles as natural completion latency. Time-to-termination and TTFT remain observations. No survival-analysis estimator is implemented."
+      },
+      {
+        "id": "dq.request_accounting",
+        "metric": "actual_http_attempts - planned_trials",
+        "operator": "==",
+        "threshold": 0,
+        "on_failure": "inconclusive",
+        "reason": "An unmatched attempt means an unaccounted request, a hidden retry, or a warmup, any of which invalidates the sample."
+      },
+      {
+        "id": "dq.sizing_conformance",
+        "metric": "provider_vs_target failed count",
+        "operator": "==",
+        "threshold": 0,
+        "on_failure": "inconclusive",
+        "reason": "If the provider did not see the requested workload size, throughput denominators are wrong. Screening measured 1.16-3.99%, comfortably inside the 10% profile tolerance."
+      },
+      {
+        "id": "dq.accounting_provenance",
+        "metric": "accounting_source_evidence_consistent",
+        "operator": "==",
+        "threshold": true,
+        "on_failure": "inconclusive",
+        "reason": "Provider accounting requires observed provider usage and verified provider-versus-target conformance, with independent client counts absent and client agreement explicitly not_observed. Client accounting requires observed independent counts and verified client-versus-provider agreement. Neither mode may back-fill independent counts. Provider mode cannot qualify tokenizer equivalence."
+      },
+      {
+        "id": "dq.engine_schema",
+        "metric": "schema_validated",
+        "operator": "==",
+        "threshold": true,
+        "on_failure": "inconclusive",
+        "reason": "An unvalidated engine schema means the numbers were never checked against the pinned version."
+      },
+      {
+        "id": "dq.raw_evidence",
+        "metric": "raw_artifacts_present",
+        "operator": "==",
+        "threshold": true,
+        "on_failure": "inconclusive",
+        "reason": "Without raw evidence there is no HTTP status, no finish_reason, and no cache-write count, so success and censoring cannot be established."
+      },
+      {
+        "id": "dq.percentile_samples",
+        "metric": "samples in the aggregated group",
+        "operator": ">=",
+        "threshold": 30,
+        "on_failure": "mean_only",
+        "reason": "Below 30 samples a percentile claim is not supported. This gate degrades the verdict's statistics rather than invalidating the run: the mean stays usable."
+      }
+    ]
+  },
+  "performance_thresholds": {
+    "status": "unratified",
+    "statement": "Every threshold below is null because no operator has supplied a requirement. A benchmark must not set its own pass mark and then announce that it passed it.",
+    "ratification_options": [
+      "Operator supplies a business SLO directly, for example from a latency budget in a product requirement.",
+      "A disjoint calibration window is designated before qualification data is examined, and thresholds are set from it. The calibration windows must not be reused as qualification evidence."
+    ],
+    "required_before_any_verdict_other_than_inconclusive": true,
+    "objectives": [
+      {
+        "id": "perf.ttft_p50_ms",
+        "metric": "time_to_first_token",
+        "statistic": "p50",
+        "unit": "ms",
+        "concurrency": 1,
+        "operator": "<=",
+        "threshold": null,
+        "screening_reference": 1475.6,
+        "note": "Screening reference is the corrected single-window cell MEAN, not a p50 and not a target. No p50 was ever computed: 20 samples is below the percentile floor. The value is here only to show the order of magnitude a threshold would have to accommodate."
+      },
+      {
+        "id": "perf.ttft_p95_ms",
+        "metric": "time_to_first_token",
+        "statistic": "p95",
+        "unit": "ms",
+        "concurrency": 1,
+        "operator": "<=",
+        "threshold": null,
+        "screening_reference": null,
+        "note": "Screening cells had 20 samples, below the percentile floor, so no p95 was ever computed. No reference value exists and none is invented here."
+      },
+      {
+        "id": "perf.ttft_p95_ms_c2",
+        "metric": "time_to_first_token",
+        "statistic": "p95",
+        "unit": "ms",
+        "concurrency": 2,
+        "operator": "<=",
+        "threshold": null,
+        "screening_reference": null,
+        "note": "No screening reference exists: 20 samples per cell is below the percentile floor, and the C=2 mean is not a p95. C=2 also read lower than C=1 on the screening mean, which is unexplained, so carrying either value forward as a target would encode an anomaly."
+      },
+      {
+        "id": "perf.latency_p50_ms",
+        "metric": "request_latency",
+        "statistic": "p50",
+        "unit": "ms",
+        "concurrency": 1,
+        "operator": "<=",
+        "threshold": null,
+        "screening_reference": 2211.4,
+        "note": "Screening reference is the corrected single-window cell MEAN, not a p50, and it is right-censored: it is time to a 256-token ceiling, not time to completion. It cannot be carried forward as a target."
+      },
+      {
+        "id": "perf.output_throughput_floor",
+        "metric": "output_token_throughput",
+        "statistic": "mean",
+        "unit": "tokens/sec",
+        "concurrency": 1,
+        "operator": ">=",
+        "threshold": null,
+        "screening_reference": 115.6,
+        "note": "Screening value is the cell mean and it counts reasoning tokens: 87-100% of completion tokens were reasoning. A threshold stated in answer tokens per second would need a visible-output measure that does not yet exist."
+      },
+      {
+        "id": "perf.endpoint_error_rate",
+        "metric": "provider_or_protocol_failures / started_trials",
+        "statistic": "fraction",
+        "unit": "ratio",
+        "concurrency": [
+          1,
+          2
+        ],
+        "operator": "<=",
+        "threshold": null,
+        "screening_reference": 0.0,
+        "note": "Ratify the tolerated error rate before collecting qualification data. Observed attributable endpoint failures are performance outcomes; they do not invalidate evidence merely by exceeding a threshold. Report count, denominator, attribution, and uncertainty separately for each concurrency level. Zero observed errors does not prove a zero population error rate."
+      }
+    ]
+  },
+  "verdict_logic": {
+    "states": [
+      "qualified",
+      "failed",
+      "inconclusive"
+    ],
+    "precedence": [
+      {
+        "state": "inconclusive",
+        "when": "any data-quality gate with on_failure=inconclusive fails, or any required performance threshold is null",
+        "meaning": "The measurement cannot support a verdict. This is not a soft failure and not a pass."
+      },
+      {
+        "state": "failed",
+        "when": "all data-quality gates pass, all performance thresholds are ratified, and at least one threshold is missed",
+        "meaning": "The endpoint did not meet a ratified requirement on trustworthy evidence."
+      },
+      {
+        "state": "qualified",
+        "when": "all data-quality gates pass and all ratified performance thresholds are met",
+        "meaning": "Narrow claim: this deployment met these thresholds, for this workload, client profile, region and time window."
+      }
+    ],
+    "current_reachable_state": "inconclusive",
+    "current_reason": "Performance thresholds are unratified. Provider accounting is permitted for delivered-workload performance with explicit provenance; it cannot support tokenizer-equivalence claims."
+  },
+  "aggregation_rules": [
+    "Evaluate each window separately before pooling anything. A window is the unit of evidence.",
+    "Never compute a percentile from fewer than 30 samples. This floor alone does not establish tail precision. Pool only uncensored windows with identical workload and client settings; publish per-window statistics and counts.",
+    "A qualification verdict requires at least three passing windows per concurrency level; one window never qualifies.",
+    "If any window fails a data-quality gate, the whole condition is inconclusive rather than averaging the failure away.",
+    "Report per-window values alongside any pooled statistic so a reader can see the spread the pool hides."
+  ],
+  "invalidation_rules": [
+    "A change to deployment key, model revision, region, or base URL invalidates the verdict.",
+    "A change to AIPerf version, client profile identity, output ceiling, or workload size invalidates comparability and requires a fresh contract.",
+    "A pricing change does not invalidate a performance verdict but does invalidate any cost claim.",
+    "Results older than the contract's datestamp cannot be used as evidence for it."
+  ],
+  "evidence_requirements": {
+    "report_schema_version": "0.2.0",
+    "trial_schema_version": "0.2.0",
+    "required_artifacts": [
+      "report.json",
+      "trials.jsonl",
+      "aiperf-config.yaml",
+      "aiperf/profile_export_aiperf.json",
+      "aiperf/profile_export.jsonl",
+      "aiperf/profile_export_raw.jsonl"
+    ],
+    "required_fields": [
+      "counters.truncated_trials",
+      "completion.finish_reason_counts",
+      "token_accounting.provider_vs_target",
+      "token_accounting.client_vs_provider",
+      "provider_telemetry.metrics"
+    ],
+    "rejected_schemas": [
+      "0.1.0"
+    ],
+    "rejection_reason": "Schema 0.1.0 reports a `sizing_verified` verdict derived from a comparison that was circular under provider accounting, and it has no truncation counter, so it cannot express the censoring this contract depends on."
+  },
+  "open_questions": [
+    "Whether a visible-answer throughput objective should exist, which would require separating reasoning tokens from content tokens per trial rather than per response.",
+    "Whether three passing windows per level is enough statistical power for a p95 objective, or whether the window count must rise with the percentile being claimed.",
+    "Who ratifies performance thresholds, and what record constitutes ratification."
+  ],
+  "implementation_status": "draft_specification_only_no_qualification_evaluator"
+}

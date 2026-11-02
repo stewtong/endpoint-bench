@@ -13,12 +13,23 @@ from typing import Any
 from .network_guard import is_loopback, local_environment
 from .sanitize import collect_secret_values, redact_secrets
 from .trials import (
+    ACCOUNTING_CLIENT_TOKENIZER,
+    ACCOUNTING_PROVIDER_USAGE,
+    EVIDENCE_FINISH_REASON_UNOBSERVED,
+    EVIDENCE_HTTP_STATUS_UNOBSERVED,
+    EVIDENCE_USAGE_UNOBSERVED,
+    FINISH_ABSENT,
+    FINISH_CEILING,
+    FINISH_CONTENT_FILTER,
+    FINISH_UNKNOWN,
     HttpAttempt,
     LifecycleState,
     OutcomeState,
+    ProviderTelemetry,
     RunCounters,
     TokenAccounting,
     Trial,
+    classify_finish_reason,
     count_trials,
     outcome_summary,
     utc_now,
@@ -644,13 +655,6 @@ def _validate_summary_identity(summary: dict[str, Any]) -> tuple[str, str]:
     return str(version), schema
 
 
-def _metric(metrics: dict[str, Any], name: str) -> Any:
-    entry = metrics.get(name)
-    if isinstance(entry, dict):
-        return entry.get("value")
-    return None
-
-
 def _classify_error(error: dict[str, Any]) -> tuple[OutcomeState, str]:
     error_type = str(error.get("type") or "")
     lowered = error_type.lower()
@@ -663,6 +667,333 @@ def _classify_error(error: dict[str, Any]) -> tuple[OutcomeState, str]:
     return OutcomeState.UNKNOWN, error_type or "unclassified"
 
 
+def _classify_http_status(
+    status: int, error: dict[str, Any] | None, body_hint: str | None
+) -> tuple[OutcomeState, str]:
+    """Map an observed non-2xx status onto an outcome.
+
+    A non-2xx response is never a success, whatever its body looked like. The
+    status is the authority; the body only refines the detail string.
+    """
+    detail_parts = [f"http_{status}"]
+    error_type = str((error or {}).get("type") or "").strip()
+    if error_type:
+        detail_parts.append(error_type)
+    hint = (body_hint or "").lower()
+    if status == 429:
+        return OutcomeState.RATE_LIMITED, " ".join(detail_parts)
+    if status in (413, 422) or (
+        status == 400 and ("context" in hint or "too long" in hint or "maximum" in hint)
+    ):
+        return OutcomeState.CONTEXT_REJECTED, " ".join(detail_parts)
+    if status >= 500:
+        return OutcomeState.SERVER_ERROR, " ".join(detail_parts)
+    if 400 <= status < 500:
+        return OutcomeState.CLIENT_ERROR, " ".join(detail_parts)
+    # 1xx/3xx are not terminal responses a benchmark can score.
+    return OutcomeState.PROTOCOL_FAILURE, " ".join(detail_parts)
+
+
+@dataclass(frozen=True)
+class RawEvidence:
+    """Per-request facts recoverable only from the raw export.
+
+    AIPerf's normalized records carry metrics but not the HTTP status, not the
+    terminal `finish_reason`, and not the provider's cache-write count. All three
+    are needed to decide whether a trial succeeded, whether its latency is
+    censored, and what the provider actually billed.
+    """
+
+    http_status: int | None = None
+    finish_reason: str | None = None
+    finish_class: str = FINISH_ABSENT
+    #: The stream carried an explicit `[DONE]` sentinel.
+    saw_done: bool = False
+    data_frames: int = 0
+    malformed_frames: int = 0
+    #: Characters of assistant `content`, excluding reasoning text.
+    content_chars: int = 0
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    requested_max_completion_tokens: int | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    #: First bytes of an error body, for classifying 4xx without storing a secret.
+    body_hint: str | None = None
+
+    @property
+    def usage_observed(self) -> bool:
+        return any(
+            value is not None
+            for value in (self.cache_read_tokens, self.cache_write_tokens, self.reasoning_tokens)
+        )
+
+    @property
+    def stream_terminated(self) -> bool:
+        """A terminal finish reason or the protocol's done sentinel was seen."""
+        return self.finish_class != FINISH_ABSENT or self.saw_done
+
+
+def _merge_usage(target: dict[str, Any], usage: dict[str, Any]) -> None:
+    """Keep the last observed non-null value for each usage detail.
+
+    Streaming providers repeat `usage` on many chunks and only populate the
+    detail objects on some of them, so a single-frame read would lose fields.
+    Last-writer-wins per key preserves the final accounting without inventing
+    values that were never sent.
+    """
+    if isinstance(usage.get("prompt_tokens_details"), dict):
+        details = usage["prompt_tokens_details"]
+        for key, field_name in (
+            ("cached_tokens", "cache_read"),
+            ("created_cache_tokens", "cache_write"),
+        ):
+            value = details.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                target[field_name] = value
+    if isinstance(usage.get("completion_tokens_details"), dict):
+        value = usage["completion_tokens_details"].get("reasoning_tokens")
+        if isinstance(value, int) and not isinstance(value, bool):
+            target["reasoning"] = value
+    # Some providers report reasoning at the top level instead.
+    value = usage.get("reasoning_tokens")
+    if isinstance(value, int) and not isinstance(value, bool):
+        target["reasoning"] = value
+
+
+def _parse_raw_record(raw: dict[str, Any]) -> RawEvidence:
+    status = raw.get("status")
+    http_status = status if isinstance(status, int) and not isinstance(status, bool) else None
+
+    payload = raw.get("payload")
+    requested_max: int | None = None
+    if isinstance(payload, dict):
+        for key in ("max_completion_tokens", "max_tokens"):
+            value = payload.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                requested_max = value
+                break
+
+    finish_reason: str | None = None
+    saw_done = False
+    data_frames = 0
+    malformed = 0
+    content_chars = 0
+    usage: dict[str, Any] = {}
+    body_lines: list[str] = []
+
+    responses = raw.get("responses")
+    if isinstance(responses, list):
+        for group in responses:
+            if not isinstance(group, dict):
+                continue
+            for packet in group.get("packets") or []:
+                if not isinstance(packet, dict) or packet.get("name") != "data":
+                    continue
+                value = packet.get("value")
+                if not isinstance(value, str):
+                    continue
+                if value.strip() == "[DONE]":
+                    saw_done = True
+                    continue
+                data_frames += 1
+                try:
+                    document = json.loads(value)
+                except json.JSONDecodeError:
+                    malformed += 1
+                    if len(body_lines) < 4:
+                        body_lines.append(value)
+                    continue
+                if not isinstance(document, dict):
+                    continue
+                choices = document.get("choices")
+                if isinstance(choices, list) and choices:
+                    choice = choices[0]
+                    if isinstance(choice, dict):
+                        reason = choice.get("finish_reason")
+                        if isinstance(reason, str) and reason:
+                            finish_reason = reason
+                        delta = choice.get("delta")
+                        if isinstance(delta, dict):
+                            content = delta.get("content")
+                            if isinstance(content, str):
+                                content_chars += len(content)
+                if isinstance(document.get("usage"), dict):
+                    _merge_usage(usage, document["usage"])
+                if isinstance(document.get("error"), dict):
+                    error = document["error"]
+                    body_lines.append(str(error.get("message") or error.get("type") or ""))
+
+    error_type = None
+    error_message = None
+    error = raw.get("error")
+    if isinstance(error, dict):
+        error_type = str(error.get("type") or "") or None
+        error_message = str(error.get("message") or "") or None
+
+    hint = " ".join(part for part in body_lines if part)[:400] or None
+
+    return RawEvidence(
+        http_status=http_status,
+        finish_reason=finish_reason,
+        finish_class=classify_finish_reason(finish_reason),
+        saw_done=saw_done,
+        data_frames=data_frames,
+        malformed_frames=malformed,
+        content_chars=content_chars,
+        cache_read_tokens=usage.get("cache_read"),
+        cache_write_tokens=usage.get("cache_write"),
+        reasoning_tokens=usage.get("reasoning"),
+        requested_max_completion_tokens=requested_max,
+        error_type=error_type,
+        error_message=error_message,
+        body_hint=hint,
+    )
+
+
+def _load_raw_evidence(artifact_dir: Path) -> tuple[dict[str, RawEvidence], list[str]]:
+    """Map request id to raw per-request evidence.
+
+    Joined by `x_request_id` rather than by position, because AIPerf writes the
+    normalized records per worker and their order is not guaranteed.
+    """
+    evidence: dict[str, RawEvidence] = {}
+    notes: list[str] = []
+    raw_path = artifact_dir / RAW_RECORDS_FILE
+    if not raw_path.is_file():
+        notes.append(
+            "raw export absent; HTTP status, finish_reason, and cache-write counts "
+            "cannot be recovered, so no trial can be asserted successful"
+        )
+        return evidence, notes
+    unreadable = 0
+    for line in raw_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            raw = json.loads(line)
+        except json.JSONDecodeError:
+            unreadable += 1
+            continue
+        if not isinstance(raw, dict):
+            unreadable += 1
+            continue
+        request_id = (raw.get("metadata") or {}).get("x_request_id")
+        if not isinstance(request_id, str) or not request_id:
+            unreadable += 1
+            continue
+        evidence[request_id] = _parse_raw_record(raw)
+    if unreadable:
+        notes.append(
+            f"{unreadable} raw record(s) could not be joined to a normalized record; "
+            "their HTTP status and finish reason are unavailable"
+        )
+    return evidence, notes
+
+
+def _metric(metrics: dict[str, Any], name: str) -> Any:
+    entry = metrics.get(name)
+    if isinstance(entry, dict):
+        return entry.get("value")
+    return None
+
+
+def _token_accounting(
+    *,
+    metrics: dict[str, Any],
+    raw: RawEvidence | None,
+    accounting_source: str,
+    target_input_tokens: int | None,
+    token_tolerance_pct: float,
+) -> TokenAccounting:
+    """Build token accounting without manufacturing an independent client count.
+
+    Under provider accounting AIPerf populates `input_sequence_length` and
+    `output_sequence_length` from the server's `usage`, so treating those as
+    client estimates makes `client_vs_provider` compare a number with itself.
+    The client fields are therefore left `None` and the note records why.
+    """
+    provider_input = _metric(metrics, "usage_prompt_tokens")
+    provider_output = _metric(metrics, "usage_completion_tokens")
+    if accounting_source == ACCOUNTING_PROVIDER_USAGE:
+        client_estimate = None
+        observed_output = None
+        note = (
+            "provider accounting: AIPerf derives input_sequence_length and "
+            "output_sequence_length from provider usage, so they are not "
+            "independent client estimates and are not recorded as such"
+        )
+    else:
+        client_estimate = _metric(metrics, "input_sequence_length")
+        observed_output = _metric(metrics, "output_sequence_length")
+        note = None
+    return TokenAccounting(
+        target_input_tokens=target_input_tokens,
+        client_estimated_input_tokens=client_estimate,
+        provider_input_tokens=provider_input,
+        provider_output_tokens=provider_output,
+        observed_output_tokens=observed_output,
+        tolerance_pct=token_tolerance_pct,
+        accounting_source=accounting_source,
+        client_estimate_note=note,
+    )
+
+
+def _provider_telemetry(
+    *,
+    metrics: dict[str, Any],
+    raw: RawEvidence | None,
+    provider_output_tokens: int | None,
+) -> ProviderTelemetry:
+    """Prefer AIPerf's normalized metrics; fall back to the raw stream.
+
+    AIPerf 0.13.0 exposes cache-read and reasoning counts but no cache-write
+    metric, so cache-write can only come from the raw `usage` details. Each field
+    records which source produced it.
+    """
+    sources: dict[str, str] = {}
+
+    def pick(metric_name: str, raw_value: int | None, field_name: str) -> int | None:
+        value = _metric(metrics, metric_name)
+        if isinstance(value, int) and not isinstance(value, bool):
+            sources[field_name] = "aiperf_metric"
+            return value
+        if raw_value is not None:
+            sources[field_name] = "raw_response_usage"
+            return raw_value
+        return None
+
+    cache_read = pick(
+        "usage_prompt_cache_read_tokens",
+        raw.cache_read_tokens if raw else None,
+        "cache_read_tokens",
+    )
+    reasoning = pick(
+        "usage_reasoning_tokens",
+        raw.reasoning_tokens if raw else None,
+        "reasoning_tokens",
+    )
+    cache_write = raw.cache_write_tokens if raw else None
+    if cache_write is not None:
+        sources["cache_write_tokens"] = "raw_response_usage"
+
+    if provider_output_tokens is not None and reasoning is not None:
+        visible: int | None = max(provider_output_tokens - reasoning, 0)
+        sources["visible_output_tokens"] = "derived:provider_output_minus_reasoning"
+    else:
+        visible = None
+
+    return ProviderTelemetry(
+        cache_read_tokens=cache_read,
+        cache_write_tokens=cache_write,
+        reasoning_tokens=reasoning,
+        visible_output_tokens=visible,
+        sources=sources,
+    )
+
+
 def _trial_from_record(
     record: dict[str, Any],
     *,
@@ -671,8 +1002,10 @@ def _trial_from_record(
     index: int,
     target_input_tokens: int | None = None,
     token_tolerance_pct: float = 10.0,
-    http_status: int | None = None,
+    accounting_source: str = ACCOUNTING_CLIENT_TOKENIZER,
+    raw: RawEvidence | None = None,
 ) -> Trial:
+    """Build one trial, requiring positive evidence before asserting success."""
     metadata = record.get("metadata") or {}
     metrics = record.get("metrics") or {}
     trial = Trial(
@@ -686,8 +1019,10 @@ def _trial_from_record(
         trial.observe(LifecycleState.SKIPPED)
         trial.outcome = OutcomeState.CONTEXT_REJECTED
         trial.outcome_detail = "context_overflow_skip"
+        trial.attribution = "harness"
         return trial
 
+    http_status = raw.http_status if raw else None
     if metadata.get("was_cancelled"):
         trial.observe(LifecycleState.STARTED)
         trial.observe(LifecycleState.CANCELLED)
@@ -708,28 +1043,149 @@ def _trial_from_record(
         )
     )
 
+    if raw is not None:
+        trial.finish_reason = raw.finish_reason
+        trial.finish_class = raw.finish_class
+        trial.requested_max_completion_tokens = raw.requested_max_completion_tokens
+
     error = record.get("error")
-    if isinstance(error, dict):
-        outcome, detail = _classify_error(error)
+    error_document = error if isinstance(error, dict) else None
+
+    # A non-2xx status is decisive and takes precedence over any body content.
+    if http_status is not None and not (200 <= http_status < 300):
+        trial.observe(LifecycleState.TRANSPORT_COMPLETED)
+        outcome, detail = _classify_http_status(
+            http_status, error_document, raw.body_hint if raw else None
+        )
         trial.outcome = outcome
         trial.outcome_detail = detail
+        trial.attribution = "provider" if http_status >= 500 or http_status == 429 else "unknown"
+        if not trial.finish_class or trial.finish_class == FINISH_ABSENT:
+            trial.finish_class = FINISH_ABSENT
+        return trial
+
+    # An explicit transport error is positive evidence of failure. A connection
+    # error legitimately has no HTTP status, so it is classified from the error
+    # rather than from the absence of a status.
+    if error_document is not None:
+        trial.observe(LifecycleState.TRANSPORT_COMPLETED)
+        outcome, detail = _classify_error(error_document)
+        trial.outcome = outcome
+        trial.outcome_detail = detail
+        trial.attribution = "harness" if outcome is OutcomeState.CLIENT_ERROR else "provider"
+        if outcome is OutcomeState.UNKNOWN:
+            trial.evidence_gaps.append(EVIDENCE_FINISH_REASON_UNOBSERVED)
+        return trial
+
+    if http_status is None:
+        trial.observe(LifecycleState.TRANSPORT_COMPLETED)
+        trial.evidence_gaps.append(EVIDENCE_HTTP_STATUS_UNOBSERVED)
+        trial.outcome = OutcomeState.UNKNOWN
+        trial.outcome_detail = "http_status_unobserved"
+        trial.attribution = "harness"
+        trial.notes.append(
+            "no HTTP status was recoverable for this request, so success cannot be "
+            "asserted even though a response body was recorded"
+        )
         return trial
 
     trial.observe(LifecycleState.TRANSPORT_COMPLETED)
-    trial.observe(LifecycleState.PROTOCOL_COMPLETED)
-    trial.token_accounting = TokenAccounting(
+    if raw is not None and not raw.malformed_frames and raw.finish_class != FINISH_ABSENT:
+        trial.observe(LifecycleState.PROTOCOL_COMPLETED)
+
+    trial.token_accounting = _token_accounting(
+        metrics=metrics,
+        raw=raw,
+        accounting_source=accounting_source,
         target_input_tokens=target_input_tokens,
-        client_estimated_input_tokens=_metric(metrics, "input_sequence_length"),
-        provider_input_tokens=_metric(metrics, "usage_prompt_tokens"),
-        provider_output_tokens=_metric(metrics, "usage_completion_tokens"),
-        observed_output_tokens=_metric(metrics, "output_sequence_length"),
-        tolerance_pct=token_tolerance_pct,
+        token_tolerance_pct=token_tolerance_pct,
+    )
+    trial.provider_telemetry = _provider_telemetry(
+        metrics=metrics,
+        raw=raw,
+        provider_output_tokens=trial.token_accounting.provider_output_tokens,
     )
     trial.ttft_ms = _metric(metrics, "time_to_first_token")
     trial.duration_ms = _metric(metrics, "request_latency")
     trial.input_tokens = _metric(metrics, "usage_prompt_tokens")
     trial.output_tokens = _metric(metrics, "usage_completion_tokens")
     trial.total_tokens = _metric(metrics, "usage_total_tokens")
+
+    if raw is not None and raw.malformed_frames:
+        trial.outcome = OutcomeState.PROTOCOL_FAILURE
+        trial.outcome_detail = "malformed_sse_json"
+        trial.attribution = "provider"
+        trial.notes.append(f"{raw.malformed_frames} malformed SSE data frame(s) observed")
+        return trial
+
+    if raw is None:
+        # No finish reason means no way to distinguish a natural completion from
+        # a ceiling cut, so the stricter reading wins.
+        trial.evidence_gaps.append(EVIDENCE_FINISH_REASON_UNOBSERVED)
+        trial.outcome = OutcomeState.UNKNOWN
+        trial.outcome_detail = "finish_reason_unobserved"
+        trial.attribution = "harness"
+        trial.notes.append(
+            "response completed at the transport level but no finish_reason was "
+            "recoverable; natural completion is unverified"
+        )
+        return trial
+
+    if not trial.provider_telemetry.cache_telemetry_observed:
+        trial.notes.append(EVIDENCE_USAGE_UNOBSERVED)
+
+    if trial.finish_class == FINISH_CEILING:
+        trial.outcome = OutcomeState.OUTPUT_TRUNCATED
+        trial.outcome_detail = (
+            f"finish_reason_{trial.finish_reason}"
+            if trial.requested_max_completion_tokens is None
+            else f"finish_reason_{trial.finish_reason}_at_max_completion_tokens_"
+            f"{trial.requested_max_completion_tokens}"
+        )
+        # Our own ceiling caused this, so it is a harness configuration outcome,
+        # not an endpoint defect.
+        trial.attribution = "harness"
+        trial.notes.append(
+            "response stopped at the configured output ceiling; request_latency is "
+            "time-to-ceiling, a lower bound on time-to-completion"
+        )
+        return trial
+
+    if trial.finish_class == FINISH_CONTENT_FILTER:
+        trial.outcome = OutcomeState.PROTOCOL_FAILURE
+        trial.outcome_detail = f"finish_reason_{trial.finish_reason}"
+        trial.attribution = "provider"
+        trial.notes.append("provider stopped the response on a content policy")
+        return trial
+
+    if trial.finish_class == FINISH_ABSENT:
+        interrupted = not raw.saw_done
+        trial.outcome = (
+            OutcomeState.STREAM_INTERRUPTED if interrupted else OutcomeState.PROTOCOL_FAILURE
+        )
+        trial.outcome_detail = (
+            "stream_ended_without_finish_reason"
+            if interrupted
+            else "response_without_finish_reason"
+        )
+        trial.attribution = "provider"
+        trial.evidence_gaps.append(EVIDENCE_FINISH_REASON_UNOBSERVED)
+        trial.notes.append(
+            "no terminal finish_reason was observed; the response may be incomplete"
+        )
+        return trial
+
+    if trial.finish_class == FINISH_UNKNOWN:
+        trial.outcome = OutcomeState.UNKNOWN
+        trial.outcome_detail = f"unrecognized_finish_reason_{trial.finish_reason}"
+        trial.attribution = "provider"
+        trial.notes.append(
+            f"finish_reason `{trial.finish_reason}` is not in the known vocabulary; "
+            "it is reported rather than assumed natural"
+        )
+        return trial
+
+    # FINISH_NATURAL: 2xx, terminal natural finish reason.
     trial.outcome = OutcomeState.SUCCESS
     trial.outcome_detail = "completed"
 
@@ -739,33 +1195,27 @@ def _trial_from_record(
             f"client-vs-provider input token count differs by {input_diff:.1f}%; "
             "do not make token-normalized claims from the client count"
         )
+    if trial.provider_telemetry.all_reasoning:
+        trial.notes.append(
+            "the entire completion budget was reasoning tokens; no visible answer "
+            "content was emitted"
+        )
     return trial
 
 
 def _load_http_statuses(artifact_dir: Path) -> dict[str, int]:
     """Map request id to HTTP status from raw evidence.
 
-    The normalized records carry metrics but not the HTTP status; only the raw
-    export has it. Joined by `x_request_id` rather than by position because
-    records are written per worker and order is not guaranteed.
+    Retained as a thin view over `_load_raw_evidence` for callers that only need
+    the status. The normalized records carry metrics but not the HTTP status;
+    only the raw export has it.
     """
-    statuses: dict[str, int] = {}
-    raw_path = artifact_dir / RAW_RECORDS_FILE
-    if not raw_path.is_file():
-        return statuses
-    for line in raw_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            raw = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        status = raw.get("status")
-        request_id = (raw.get("metadata") or {}).get("x_request_id")
-        if isinstance(status, int) and isinstance(request_id, str):
-            statuses[request_id] = status
-    return statuses
+    evidence, _ = _load_raw_evidence(artifact_dir)
+    return {
+        request_id: item.http_status
+        for request_id, item in evidence.items()
+        if item.http_status is not None
+    }
 
 
 def parse_artifacts(
@@ -775,6 +1225,7 @@ def parse_artifacts(
     profile_name: str,
     target_input_tokens: int | None = None,
     token_tolerance_pct: float = 10.0,
+    accounting_source: str = ACCOUNTING_CLIENT_TOKENIZER,
 ) -> AiperfResults:
     """Parse AIPerf artifacts, validating version and schema before trusting them."""
     summary_path = artifact_dir / SUMMARY_FILE
@@ -799,7 +1250,8 @@ def parse_artifacts(
             "Only per-request error evidence is available."
         )
 
-    status_by_request = _load_http_statuses(artifact_dir)
+    raw_by_request, raw_notes = _load_raw_evidence(artifact_dir)
+    notes.extend(raw_notes)
 
     records: list[dict[str, Any]] = []
     if records_path.is_file():
@@ -824,14 +1276,31 @@ def parse_artifacts(
             index=index,
             target_input_tokens=target_input_tokens,
             token_tolerance_pct=token_tolerance_pct,
-            http_status=status_by_request.get(
-                str((record.get("metadata") or {}).get("x_request_id"))
-            ),
+            accounting_source=accounting_source,
+            raw=raw_by_request.get(str((record.get("metadata") or {}).get("x_request_id"))),
         )
         for index, record in enumerate(records)
     ]
     counters = count_trials(trials)
-    benchmark_failed = summary is None
+    # A benchmark failure means the endpoint produced nothing scoreable. A run in
+    # which every response was cut by our own output ceiling is not a failure of
+    # the endpoint or of the benchmark: it measured real time-to-first-token and
+    # token rates, and it is reported as truncated rather than successful.
+    benchmark_failed = summary is None or (
+        bool(trials) and counters.succeeded == 0 and counters.truncated == 0
+    )
+    if counters.succeeded == 0 and counters.truncated:
+        notes.append(
+            f"no trial completed naturally: {counters.truncated} of {counters.started} "
+            "started trials stopped at the configured output ceiling. Timings and token "
+            "rates remain measurable; completion latency is censored."
+        )
+
+    if raw_by_request and len(raw_by_request) != len(records):
+        notes.append(
+            f"raw export has {len(raw_by_request)} request(s) against {len(records)} "
+            "normalized record(s); unmatched trials carry no status or finish reason"
+        )
 
     return AiperfResults(
         aiperf_version=version,

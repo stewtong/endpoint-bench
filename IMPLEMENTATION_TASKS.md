@@ -1,8 +1,8 @@
 # Implementation tasks — Agent Endpoint Bench v0.5
 
-**Version:** 0.5.1
+**Version:** 0.5.3
 **Datestamp:** 2026-11-01  
-**Source:** `AGENTS.md` and canonical `BENCHMARK_PLAN.md` v0.5.1.
+**Source:** `AGENTS.md` and canonical `BENCHMARK_PLAN.md` v0.5.1, plus the measurement-integrity correction.
 **Status:** Approved execution checklist; not evidence of completed benchmark runs.  
 **Update rule:** Keep gate deliverables, prerequisites, exits, and safety rules aligned with the canonical plan. Preserve historical evidence separately.
 
@@ -116,8 +116,17 @@ What this does **not** establish: capacity, concurrency behaviour, cache behavio
 
 ## Gate 3 — Standard performance profiles
 
-**Status (2026-11-02): screening executed; Gate 3 not exited.** See [`docs/GATE3_PREPARATION.md`](docs/GATE3_PREPARATION.md). Delivered toward this gate: metric-specific validity states so token-sizing failures no longer erase latency evidence; a reproducible local-mock benchmark with agent-shaped Mooncake trace replay and a normalized report; three screening profiles at 1K/10K/32K with a concurrency override; exact dry-run manifests and conservative cost estimates for six screening runs and one live tool-call continuation test. Six screening cells (1K/10K/32K at concurrency 1 and 2) have been executed against one deployment: 120 trials, 120 HTTP attempts, zero failures. Results are in `docs/GATE3_RESULTS.md`. Gate 3 exit still requires versioned qualification thresholds calibrated against multi-window evidence, randomized run ordering, and cache scenarios; none of those exist yet.
+**Status (2026-11-02): screening executed, then corrected 2026-11-01; Gate 3 not exited.** See [`docs/GATE3_PREPARATION.md`](docs/GATE3_PREPARATION.md). Delivered toward this gate: metric-specific validity states so token-sizing failures no longer erase latency evidence; a reproducible local-mock benchmark with agent-shaped Mooncake trace replay and a normalized report; three screening profiles at 1K/10K/32K with a concurrency override; exact dry-run manifests and conservative cost estimates for six screening runs and one live tool-call continuation test. Six screening cells (1K/10K/32K at concurrency 1 and 2) have been executed against one deployment: 120 planned trials, 120 HTTP attempts, zero endpoint failures. Results are in `docs/GATE3_RESULTS.md`. Gate 3 exit still requires versioned qualification thresholds calibrated against multi-window evidence, randomized run ordering, and cache scenarios; none of those exist yet.
 
+**Measurement-integrity correction (2026-11-01).** Reprocessing all six cells from their original raw artifacts found three harness defects that changed published numbers. See [`docs/GATE3_RESULTS_CORRECTION_1.md`](docs/GATE3_RESULTS_CORRECTION_1.md).
+
+1. Token sizing was circular under provider accounting: AIPerf derives its input-length metric from provider usage in that mode, so the client-versus-provider comparison compared a number with itself. Sizing is now two separately reported verdicts and the client measure is absent, not back-filled, under provider accounting.
+2. Every protocol-completed response was scored `success`. `finish_reason` was never read and was `null` in all 120 stored records. In fact **117 of 120 responses stopped at the 256-token output ceiling**; 3 completed naturally. Ceiling truncation is now `output_truncated` attributed to `harness`, counted in `truncated_trials`, and excluded from `successful_trials`. `success` now requires a witnessed 2xx status and a natural finish reason.
+3. Cache-read, cache-write, and reasoning token counts were discarded. All three are now retained per trial with provenance; cache-write exists only in the raw stream because AIPerf 0.13.0 has no metric for it.
+
+Corrected totals: 3 natural completions, 117 ceiling-truncated, 0 endpoint failures. Latency is now marked right-censored for truncated trials. TTFT, latency means, and provider-versus-target conformance (1.16–3.99%) are unchanged. The client-versus-provider check is permanently unrecoverable for these runs because no client tokenizer ever ran.
+
+Also delivered: `endpoint-bench reprocess` for re-deriving published evidence without re-execution, a 10K multi-window experiment plan with a 1024-token pilot ceiling whose adequacy remains untested, and an SLO contract that separates objective data-quality gates from business performance thresholds. The contract currently returns `inconclusive`, which is the correct answer while no threshold is ratified.
 
 **Prerequisites:** Gate 2 offline exit; explicit user authorization for any live execution.
 
@@ -242,3 +251,7 @@ The benchmark MVP's criteria are met, online as well as offline: AIPerf integrat
 - AA Data API: <https://artificialanalysis.ai/data-api/docs>
 - AA API reference: <https://artificialanalysis.ai/data-api/docs/reference>
 - AA methodology: <https://artificialanalysis.ai/methodology/intelligence-benchmarking>
+
+## Measurement-integrity follow-up (software 0.1.2)
+
+[Correction 2](docs/GATE3_RESULTS_CORRECTION_2.md) tightens malformed-stream and natural-finish validation, preserves provider-token observations independently of target conformance, and withholds natural-completion summaries for censored latency. Original source evidence and Correction 1 remain preserved. Endpoint error rate is a performance objective in the draft contract. The repeat plan is exploratory, has ten-minute start spacing and a first-window pilot stop rule, and remains unauthorized. The contract checker validates selected document properties; it is not a qualification evaluator. These changes do not exit Gate 3.

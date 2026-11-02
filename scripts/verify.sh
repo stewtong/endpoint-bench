@@ -59,6 +59,12 @@ assert len(rows) == 12
 assert len({r["session_id"] for r in rows}) == 4
 '
 
+echo "==> prepared plan and qualification contract match the code"
+uv run python scripts/check_plan_contract.py
+
+echo "==> reprocess corrects legacy evidence and leaves the source untouched"
+uv run python scripts/check_reprocess.py
+
 if [[ "$WITH_ENGINE" == "1" ]]; then
   echo "==> engine-dependent suites (requires .venv-aiperf with aiperf==0.13.0)"
   uv run pytest tests/test_aiperf_integration.py tests/test_process_lifecycle.py -q

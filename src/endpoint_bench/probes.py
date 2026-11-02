@@ -7,7 +7,16 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import urlparse
 
-from .trials import HttpAttempt, LifecycleState, OutcomeState, Trial, utc_now
+from .trials import (
+    FINISH_CEILING,
+    FINISH_NATURAL,
+    HttpAttempt,
+    LifecycleState,
+    OutcomeState,
+    Trial,
+    classify_finish_reason,
+    utc_now,
+)
 
 #: SSE field prefix for OpenAI-compatible streaming responses.
 _DATA_PREFIX = "data:"
@@ -226,6 +235,9 @@ def _fail(
     started: float,
     attribution: str,
 ) -> Trial:
+    trial.finish_class = classify_finish_reason(trial.finish_reason)
+    if outcome is OutcomeState.OUTPUT_TRUNCATED:
+        trial.observe(LifecycleState.PROTOCOL_COMPLETED)
     trial.outcome = outcome
     trial.outcome_detail = detail
     trial.attribution = attribution
@@ -234,6 +246,16 @@ def _fail(
 
 
 def _succeed(trial: Trial, detail: str, started: float) -> Trial:
+    trial.finish_class = classify_finish_reason(trial.finish_reason)
+    if trial.finish_class != FINISH_NATURAL:
+        ceiling = trial.finish_class == FINISH_CEILING
+        return _fail(
+            trial,
+            OutcomeState.OUTPUT_TRUNCATED if ceiling else OutcomeState.PROTOCOL_FAILURE,
+            f"finish_reason_{trial.finish_reason or 'absent'}",
+            started,
+            "harness" if ceiling else "provider",
+        )
     trial.observe(LifecycleState.PROTOCOL_COMPLETED)
     trial.outcome = OutcomeState.SUCCESS
     trial.outcome_detail = detail
@@ -315,7 +337,7 @@ def _read_nonstreaming(trial: Trial, response: Any, started: float) -> Trial:
         )
     if trial.finish_reason == "length":
         return _fail(
-            trial, OutcomeState.OUTPUT_TRUNCATED, "finish_reason_length", started, "provider"
+            trial, OutcomeState.OUTPUT_TRUNCATED, "finish_reason_length", started, "harness"
         )
     return _succeed(trial, "completed", started)
 
@@ -386,7 +408,7 @@ def _read_streaming(trial: Trial, response: Any, started: float) -> Trial:
         )
     if trial.finish_reason == "length":
         return _fail(
-            trial, OutcomeState.OUTPUT_TRUNCATED, "finish_reason_length", started, "provider"
+            trial, OutcomeState.OUTPUT_TRUNCATED, "finish_reason_length", started, "harness"
         )
     return _succeed(trial, "completed", started)
 
@@ -549,6 +571,7 @@ def probe_tool_round_trip(
         return trial
 
     calls, problem, finish_reason = _collect_tool_calls(config, response)
+    trial.finish_reason = finish_reason
     if problem is not None:
         outcome = (
             OutcomeState.STREAM_INTERRUPTED
@@ -604,6 +627,8 @@ def probe_tool_round_trip(
     if history_problem is not None:
         return _fail(trial, OutcomeState.PROTOCOL_FAILURE, history_problem, started, "harness")
 
+    trial.finish_reason = None
+    trial.finish_class = classify_finish_reason(None)
     second_payload = _base_payload(tool_config, messages)
     second_payload["tools"] = list(TOOL_DEFINITIONS)
     response, started = _send(

@@ -169,6 +169,48 @@ def test_no_artifacts_at_all_is_an_integration_error(tmp_path: Path) -> None:
 # Invariant 9 / 4: attempts and request accounting.
 
 
+def _raw_stream_frame(
+    *,
+    request_id: str,
+    status: int = 200,
+    finish_reason: str | None = "stop",
+    content: str = "ok",
+    usage: dict | None = None,
+    max_completion_tokens: int | None = 16,
+    saw_done: bool = True,
+) -> dict:
+    """One raw request record shaped like AIPerf's `profile_export_raw.jsonl`."""
+    packets: list[dict] = []
+    if content:
+        packets.append(
+            {
+                "name": "data",
+                "value": json.dumps(
+                    {
+                        "choices": [
+                            {"index": 0, "delta": {"content": content}, "finish_reason": None}
+                        ]
+                    }
+                ),
+            }
+        )
+    final: dict = {"choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}]}
+    if usage is not None:
+        final["usage"] = usage
+    packets.append({"name": "data", "value": json.dumps(final)})
+    if saw_done:
+        packets.append({"name": "data", "value": "[DONE]"})
+    payload: dict = {"messages": [{"role": "user", "content": "x"}], "stream": True}
+    if max_completion_tokens is not None:
+        payload["max_completion_tokens"] = max_completion_tokens
+    return {
+        "metadata": {"x_request_id": request_id},
+        "payload": payload,
+        "status": status,
+        "responses": [{"perf_ns": 1, "packets": packets}],
+    }
+
+
 def test_parse_preserves_attempt_count_separately_from_trials(tmp_path: Path) -> None:
     artifact = tmp_path / "run"
     artifact.mkdir()
@@ -179,11 +221,21 @@ def test_parse_preserves_attempt_count_separately_from_trials(tmp_path: Path) ->
         "\n".join(
             json.dumps(
                 {
-                    "metadata": {"was_cancelled": False, "context_overflow_skip": False},
+                    "metadata": {
+                        "was_cancelled": False,
+                        "context_overflow_skip": False,
+                        "x_request_id": f"req-{index}",
+                    },
                     "metrics": {"time_to_first_token": {"value": 1.0, "unit": "ms"}},
                 }
             )
-            for _ in range(2)
+            for index in range(2)
+        )
+        + "\n"
+    )
+    (artifact / "profile_export_raw.jsonl").write_text(
+        "\n".join(
+            json.dumps(_raw_stream_frame(request_id=f"req-{index}")) for index in range(2)
         )
         + "\n"
     )
@@ -193,6 +245,7 @@ def test_parse_preserves_attempt_count_separately_from_trials(tmp_path: Path) ->
     assert results.counters.planned == 2
     assert results.counters.http_attempts == 2
     assert results.counters.succeeded == 2
+    assert results.counters.truncated == 0
 
 
 # Invariants 1, 3, 4, 10: real subprocess against the local mock.
@@ -284,6 +337,9 @@ def test_process_deadline_terminates_stalled_run(tmp_path: Path) -> None:
             output_tokens=8,
             artifact_dir=artifact_dir,
             credential_env_name="ENDPOINT_BENCH_OFFLINE_API_KEY",
+            # The CLI always captures raw evidence; without it no HTTP status or
+            # finish_reason is recoverable and success cannot be asserted.
+            capture_raw=True,
         )
         config["benchmark"]["endpoint"]["timeout"] = 30.0
         config_path = artifact_dir / "aiperf-config.yaml"
@@ -319,6 +375,9 @@ def test_sweep_survives_credential_injection(tmp_path: Path) -> None:
             output_tokens=8,
             artifact_dir=artifact_dir,
             credential_env_name="ENDPOINT_BENCH_OFFLINE_API_KEY",
+            # The CLI always captures raw evidence; without it no HTTP status or
+            # finish_reason is recoverable and success cannot be asserted.
+            capture_raw=True,
         )
         # Sweep paths address dataset entries by name, not by index.
         config["sweep"] = {"type": "grid", "parameters": {"datasets.main.prompts.osl": [8, 16]}}
@@ -384,6 +443,9 @@ def test_token_accounting_records_four_distinct_measures(tmp_path: Path) -> None
             output_tokens=16,
             artifact_dir=artifact_dir,
             credential_env_name="ENDPOINT_BENCH_OFFLINE_API_KEY",
+            # The CLI always captures raw evidence; without it no HTTP status or
+            # finish_reason is recoverable and success cannot be asserted.
+            capture_raw=True,
         )
         config_path = artifact_dir / "aiperf-config.yaml"
         write_config(config_path, config)
@@ -414,15 +476,43 @@ def test_token_accounting_records_four_distinct_measures(tmp_path: Path) -> None
     assert accounting.observed_output_tokens is not None
     payload = accounting.to_dict()
     assert set(payload) == {
+        "accounting_source",
         "target_input_tokens",
         "client_estimated_input_tokens",
         "provider_input_tokens",
         "provider_output_tokens",
         "observed_output_tokens",
+        "client_estimate_note",
+        "provider_vs_target",
+        "client_vs_provider",
         "discrepancy_pct",
         "tolerance_pct",
+        "primary_check",
         "sizing_verified",
     }
+    # Client accounting keeps the client-versus-provider check authoritative.
+    assert payload["primary_check"] == "client_vs_provider"
+    # The local mock estimates usage as characters/4 rather than running the served
+    # model's tokenizer, so the two counts differ by roughly 10% here. That is a
+    # fixture limitation, not an endpoint finding.
+    #
+    # The estimate lands close to the 10% tolerance boundary and wobbles by a token
+    # or two between runs, so the exact verdict is not asserted. What must hold is
+    # that the verdict follows the measured discrepancy rather than being assumed,
+    # and that the boolean form agrees with the authoritative check.
+    discrepancy = payload["client_vs_provider"]["discrepancy_pct"]
+    assert discrepancy is not None
+    assert discrepancy > 0, "the mock cannot agree exactly with the tokenizer by construction"
+    assert (payload["client_vs_provider"]["verdict"] == "failed") == (
+        discrepancy > payload["tolerance_pct"]
+    )
+    assert payload["sizing_verified"] is (
+        payload["client_vs_provider"]["verdict"] == "verified"
+    )
+    # Both checks see the same two numbers under client accounting.
+    assert payload["provider_vs_target"]["discrepancy_pct"] == pytest.approx(
+        abs(accounting.provider_input_tokens - 64) / 64 * 100.0
+    )
 
 
 @requires_aiperf
@@ -439,6 +529,9 @@ def test_deliberate_token_mismatch_is_detected_and_blocks_claims(tmp_path: Path)
             output_tokens=16,
             artifact_dir=artifact_dir,
             credential_env_name="ENDPOINT_BENCH_OFFLINE_API_KEY",
+            # The CLI always captures raw evidence; without it no HTTP status or
+            # finish_reason is recoverable and success cannot be asserted.
+            capture_raw=True,
         )
         config_path = artifact_dir / "aiperf-config.yaml"
         write_config(config_path, config)
@@ -484,6 +577,9 @@ def test_provenance_reconciles_requests_for_a_real_run(tmp_path: Path) -> None:
             output_tokens=8,
             artifact_dir=artifact_dir,
             credential_env_name="ENDPOINT_BENCH_OFFLINE_API_KEY",
+            # The CLI always captures raw evidence; without it no HTTP status or
+            # finish_reason is recoverable and success cannot be asserted.
+            capture_raw=True,
         )
         config_path = artifact_dir / "aiperf-config.yaml"
         write_config(config_path, config)

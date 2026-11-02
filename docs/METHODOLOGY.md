@@ -1,6 +1,6 @@
 # Benchmark methodology
 
-**Version:** 0.5.1 — **Datestamp:** 2026-11-01
+**Version:** 0.5.3 — **Datestamp:** 2026-11-01
 **Status:** Design contract. The repository implements offline configuration validation, dry-run manifests, normalized trial evidence with per-metric validity, deterministic conformance probes, a pinned AIPerf 0.13.0 wrapper, and agent-shaped trace replay. Six screening cells and a live tool-call continuation have run against one deployment. No endpoint has been qualified, and no capacity, reliability, cache, or long-context claim is supported.
 
 ## Measurement scope
@@ -129,15 +129,42 @@ Four token measures are retained separately and never collapsed:
 3. **Provider-reported** — what the provider returned in `usage`.
 4. **Observed output** — what the client counted in the response.
 
-A purported workload size is not evidence of a delivered workload. When the client estimate and the provider report differ beyond a profile-defined tolerance, workload sizing is unverified and token-normalized performance and long-context claims are withheld. Missing provider telemetry is unverifiable, which is not a pass.
+A purported workload size is not evidence of a delivered workload. No correction factor is ever applied to a reported count. If the numbers disagree, the run is reported as disagreeing.
 
-No correction factor is ever applied to a reported count. If the numbers disagree, the run is reported as disagreeing.
+Two comparisons answer two different questions, and a verdict must name which one it performed:
+
+- **provider versus target** — did the provider see the workload size the profile requested? Available in both accounting modes, and authoritative when token counts come from the provider.
+- **client versus provider** — does an independent client tokenizer agree with the provider? Available only when a client tokenizer actually ran.
+
+Under provider token accounting, the engine derives its input and output length metrics *from the provider's own usage*. Comparing those against provider usage compares a number with itself and always agrees. An implementation must therefore leave the client measure absent in that mode rather than populate it from the provider, and must not report the agreement as a verification.
+
+Missing telemetry is unverifiable, which is not a pass.
 
 The built-in offline tokenizer is appropriate for functional and protocol tests. It is not authoritative for a hosted model, whose own accounting may differ.
 
+## Completion classification
+
+A successful HTTP exchange is not a completed response. The server may stop because it reached our output ceiling, because a content policy fired, or because the stream broke. Each of those is a different finding, and only a natural stop is a clean completion.
+
+`finish_reason` is therefore read from the raw streamed response, not inferred from the absence of an error, and mapped to a terminal class: natural, ceiling, content filter, absent, or unknown.
+
+- A response that stopped at our own `max_completion_tokens` is attributed to `harness`, counted as truncated, and excluded from the success count. Reporting it as a success hides that the measured latency is time-to-ceiling.
+- A terminal reason outside the known vocabulary is reported as unknown, never assumed natural.
+- An unrecognized reason or an absent one is not a success, because naturalness was not observed.
+
+Truncation makes latency a **censored** observation: the measured duration is a lower bound on the time a natural completion would have taken. Time to first token is unaffected, because the first token precedes any ceiling. A run with a high truncation share can still report throughput and first-token latency; it cannot report completion latency.
+
+## Provider cache and reasoning telemetry
+
+Provider-reported cache-read, cache-write, and reasoning token counts are retained per trial with the source that produced each. Absent values stay absent and are never rendered as zero.
+
+Reasoning tokens are a component of completion tokens for reasoning-capable models. When the entire completion budget is reasoning, the response contains no visible answer, and output throughput describes reasoning emission rather than answer generation. That condition is flagged rather than left for a reader to infer.
+
+Cache telemetry is not a cache measurement. Observing cache counters in an unrelated run does not establish availability, effectiveness, or retention, which require a controlled cold-versus-warm design.
+
 ## Failure attribution
 
-A failed exchange is attributed to exactly one of `provider`, `model`, `harness`, or `unknown`. A model that declines to call a required tool is a `model` outcome: a protocol-shaped failure caused by model choice, not infrastructure. Attribution is recorded per trial so aggregate failure counts do not silently imply provider fault.
+A failed exchange is attributed to exactly one of `provider`, `model`, `harness`, or `unknown`. A model that declines to call a required tool is a `model` outcome: a protocol-shaped failure caused by model choice, not infrastructure. A response cut by our own output ceiling is a `harness` outcome, not a provider defect. Attribution is recorded per trial so aggregate failure counts do not silently imply provider fault.
 
 ## Statistics
 
@@ -158,3 +185,13 @@ Thresholds are versioned and workload-specific. Preserve complete metrics indepe
 ## Known limitations and threats to validity
 
 Threats include shared public capacity, hidden serving/model revisions, undisclosed rate limits, transient incidents, client-network effects, tokenizer differences, missing usage telemetry, cache-accounting ambiguity, streaming semantics, and provider-specific response schemas. Results should not be presented as universal SLAs or provider endorsements.
+
+## Integrity follow-up (0.1.2)
+
+Malformed stream frames cannot be rescued by a later natural stop. Successful normalized trials require a witnessed 2xx response and a consistent natural finish reason/class, including independent probes.
+
+Workload conformance and metric provenance are separate. Provider-token throughput describes the workload actually delivered even when it differs from the target. Such a run cannot support a requested-size or long-context claim. Client-tokenized throughput needs independent tokenizer agreement.
+
+Censored latency summaries describe time to termination. Neither their mean nor their percentiles represent natural completion latency; completion percentiles remain unusable even above the sample-count floor. No censoring-adjusted estimator is implemented.
+
+The six-window 10K plan is exploratory, with ten-minute start spacing and a first-window pilot. Its 1024-token cap is a hypothesis: the three naturally completed screening responses were selected from a heavily censored population. Stop and version the plan if the pilot is censored or its evidence is invalid. Qualification requires a later frozen contract and ratified objectives, including endpoint error rate; genuine endpoint errors are outcomes rather than automatic evidence invalidation. The contract remains a specification, not an evaluator.

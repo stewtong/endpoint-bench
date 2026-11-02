@@ -1,5 +1,15 @@
 # Screening results — 2026-11-02
 
+> **Corrected 2026-11-01.** Two claims below are wrong and one is narrower than stated.
+> The harness scored every protocol-completed response as `success` without reading
+> `finish_reason`; in fact **117 of 120 responses stopped at the 256-token output
+> ceiling**, not 0. The token-sizing verdict was also reached through a circular
+> comparison that happened to give the right answer. See
+> [`GATE3_RESULTS_CORRECTION_1.md`](GATE3_RESULTS_CORRECTION_1.md) for the corrected
+> table, the fields that changed, and the observations that cannot be recovered.
+> [Correction 2](GATE3_RESULTS_CORRECTION_2.md) adds the current validation and censoring guardrails.
+> The historical results below are preserved as originally published.
+
 **Status:** Screening evidence only. Single window, 20 samples per cell, one deployment, one client profile. This is **not** qualification and supports no capacity, reliability, cache, or comparative claim.
 
 ## Conditions

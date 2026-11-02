@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "name": "qualification-10k",
+  "description": "10k input qualification cell. Same workload as screening-10k but with a 1024-token output ceiling. Screening at 256 tokens cut 117 of 120 responses at the ceiling; the three that finished naturally used 217-249 tokens, so 256 sat right at the natural boundary. 1024 gives roughly 4x the observed natural completion length. This profile is NOT sufficient for qualification on its own: see docs/qualification/10k-slo-contract.md.",
+  "request_count": 20,
+  "input_tokens": 10240,
+  "max_output_tokens": 1024,
+  "concurrency": 1,
+  "streaming": true,
+  "timeout_s": 180,
+  "token_tolerance_pct": 10.0,
+  "qualification": {
+    "status": "provisional",
+    "screening": false,
+    "contract": "docs/qualification/10k-slo-contract.json",
+    "note": "One cell in a multi-window design. A single window never yields a qualification verdict. Performance thresholds in the contract are unratified, so the only reachable verdict today is `inconclusive`."
+  }
+}

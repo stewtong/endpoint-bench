@@ -10,16 +10,25 @@ from .cost import cost_preflight
 from .profiles import Profile
 from .registry import Deployment
 from .trials import (
+    ACCOUNTING_PROVIDER_USAGE,
     WORKLOAD_FRAMEWORK_AGENT,
     WORKLOAD_LIVE_TURN_CONFORMANCE,
     WORKLOAD_RECORDED_MULTI_TURN_REPLAY,
     WORKLOAD_SYNTHETIC_SINGLE_TURN,
     Trial,
+    completion_summary,
     outcome_summary,
+    provider_telemetry_summary,
     token_sizing_summary,
 )
 
-REPORT_SCHEMA_VERSION = "0.1.0"
+REPORT_SCHEMA_VERSION = "0.2.0"
+#: Report schemas this reader can load. Older reports predate the separation of
+#: provider-versus-target conformance from client-versus-provider agreement and
+#: the completion classification, so they are loaded and labelled legacy rather
+#: than reinterpreted.
+LEGACY_REPORT_SCHEMA_VERSIONS = ("0.1.0",)
+READABLE_REPORT_SCHEMA_VERSIONS = (REPORT_SCHEMA_VERSION, *LEGACY_REPORT_SCHEMA_VERSIONS)
 
 #: Every workload kind, with the label the report uses to describe it. Replay is
 #: never described as autonomous agent execution.
@@ -48,6 +57,15 @@ REPORTED_METRICS = (
     "usage_prompt_tokens",
     "usage_completion_tokens",
     "usage_prompt_tokens_diff_pct",
+    # Provider cache and reasoning telemetry. AIPerf 0.13.0 normalizes cache-read
+    # and reasoning counts but exposes no cache-write metric.
+    "usage_prompt_cache_read_tokens",
+    "total_usage_prompt_cache_read_tokens",
+    "overall_usage_prompt_cache_read_pct",
+    "usage_reasoning_tokens",
+    "total_usage_reasoning_tokens",
+    "reasoning_token_count",
+    "total_reasoning_tokens",
 )
 
 
@@ -95,7 +113,9 @@ TOKEN_NORMALIZED_METRICS = frozenset(
 )
 
 #: Metrics produced by client-side tokenization. They measure the tokenizer, not
-#: the endpoint, whenever the tokenizer does not match the served model.
+#: the endpoint, whenever the tokenizer does not match the served model. Under
+#: provider accounting these metrics are derived from provider usage instead, so
+#: they are reclassified rather than condemned.
 CLIENT_TOKENIZED_METRICS = frozenset(
     {
         "input_sequence_length",
@@ -108,12 +128,40 @@ CLIENT_TOKENIZED_METRICS = frozenset(
     }
 )
 
+#: Token counts the provider itself reported, or that AIPerf derived from them.
+#: They are authoritative for the served model regardless of how workload sizing
+#: was verified, so a sizing problem elsewhere does not invalidate them.
+#:
+#: `reasoning_token_count` is included because it equals `usage_reasoning_tokens`
+#: exactly on every trial of the screening runs (including non-round values such
+#: as 114 against a 222-token completion), so it is provider-sourced under
+#: provider accounting rather than independently client-counted.
+PROVIDER_REPORTED_METRICS = frozenset(
+    {
+        "usage_prompt_tokens",
+        "usage_completion_tokens",
+        "usage_total_tokens",
+        "usage_prompt_cache_read_tokens",
+        "total_usage_prompt_cache_read_tokens",
+        "overall_usage_prompt_cache_read_pct",
+        "usage_reasoning_tokens",
+        "total_usage_reasoning_tokens",
+        "reasoning_token_count",
+        "total_reasoning_tokens",
+    }
+)
+
+#: Request-level timing metrics whose value is a lower bound rather than a
+#: completion time when the response stopped at the output ceiling.
+CENSORED_BY_OUTPUT_CEILING = frozenset({"request_latency", "effective_latency"})
+
 #: Below this sample count, percentile claims are not supported.
 PERCENTILE_MIN_SAMPLES = 30
 
 VALIDITY_STATES = (
     "valid",
     "valid_mean_only",
+    "censored",
     "invalid_token_sizing",
     "invalid_client_tokenization",
     "not_observed",
@@ -125,40 +173,92 @@ def assess_metric_validity(
     metrics: dict[str, Any],
     sizing: dict[str, Any],
     successful_trials: int,
+    accounting_source: str | None = None,
+    completion: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Classify each metric's usability independently.
 
     A token-count problem must not invalidate latency evidence, and a latency
     problem must not invalidate provider-reported usage. Each metric states its
     own state and reason so a reader can use what is sound and ignore what is not.
+
+    The reason always names the comparison that produced the verdict, because
+    under provider accounting the client-versus-provider check did not run at all
+    and a verdict that does not say so is misleading.
     """
     sizing_ok = bool(sizing.get("claims_supported"))
+    provider_accounting = accounting_source == ACCOUNTING_PROVIDER_USAGE
+    if provider_accounting:
+        sizing_reason = "provider-reported input matches the requested workload size"
+        sizing_failure_reason = (
+            "provider-reported input does not match the requested workload size; "
+            "requested-size claims are unsupported"
+        )
+    else:
+        sizing_reason = "client tokenization agrees with provider-reported usage"
+        sizing_failure_reason = (
+            "client token counts disagree with provider usage; the denominator is unreliable"
+        )
+
+    censored = bool((completion or {}).get("latency_censored"))
+    censored_fraction = (completion or {}).get("latency_censored_fraction")
     validity: dict[str, dict[str, Any]] = {}
 
     for name, entry in sorted(metrics.items()):
         if not isinstance(entry, dict):
             continue
 
-        if name in TOKEN_NORMALIZED_METRICS:
-            if sizing_ok:
-                state, reason = "valid", "workload token sizing verified within tolerance"
-            else:
+        if name in PROVIDER_REPORTED_METRICS:
+            state, reason = (
+                "valid",
+                "reported by, or derived directly from, provider usage for the served model",
+            )
+        elif name in TOKEN_NORMALIZED_METRICS:
+            if provider_accounting:
                 state, reason = (
-                    "invalid_token_sizing",
-                    "token counts disagree with provider usage; the denominator is unreliable",
+                    "valid",
+                    "provider-token throughput for the workload actually delivered; "
+                    "requested-size comparability is assessed separately",
                 )
+            elif sizing_ok:
+                state, reason = "valid", sizing_reason
+            else:
+                state, reason = "invalid_token_sizing", sizing_failure_reason
         elif name in CLIENT_TOKENIZED_METRICS:
-            if sizing_ok:
+            if provider_accounting:
+                # Not a client tokenization at all under this mode: AIPerf filled
+                # these from provider usage.
+                state, reason = (
+                    "valid",
+                    "derived from provider usage, not an independent client tokenization; "
+                    "requested-size comparability is assessed separately",
+                )
+            elif sizing_ok:
                 state, reason = "valid", "client tokenization agrees with provider usage"
             else:
                 state, reason = (
                     "invalid_client_tokenization",
                     "client tokenizer does not match the served model",
                 )
-        elif successful_trials == 0:
-            state, reason = "not_observed", "no successful trial produced this metric"
+        elif successful_trials == 0 and not isinstance(entry.get("count"), int):
+            state, reason = "not_observed", "no completed trial produced this metric"
         else:
-            state, reason = "valid", "measured directly from response timing"
+            # Presence in the metric snapshot already means AIPerf emitted it.
+            # Whether a trial is classified successful is a separate question:
+            # a ceiling-truncated response still measured real time-to-first-token.
+            count_value = entry.get("count")
+            if isinstance(count_value, int) and count_value <= 0:
+                state, reason = "not_observed", "the engine emitted zero samples for this metric"
+            else:
+                state, reason = "valid", "measured directly from response timing"
+
+        is_censored = censored and name in CENSORED_BY_OUTPUT_CEILING
+        if is_censored and state in ("valid", "valid_mean_only"):
+            share = f"{censored_fraction:.0%}" if isinstance(censored_fraction, float) else "some"
+            reason = (
+                f"{reason}; right-censored: {share} of completed trials stopped at the "
+                "configured output ceiling, so this is a lower bound on time-to-completion"
+            )
 
         count = entry.get("count")
         if state == "valid" and isinstance(count, int) and count < PERCENTILE_MIN_SAMPLES:
@@ -166,12 +266,19 @@ def assess_metric_validity(
             reason = (
                 f"{count} sample(s) below the {PERCENTILE_MIN_SAMPLES}-sample minimum; "
                 "mean is usable, percentile claims are not"
+                + ("; value is right-censored by the output ceiling" if is_censored else "")
             )
 
+        if is_censored and state in ("valid", "valid_mean_only"):
+            state = "censored"
         validity[name] = {
             "state": state,
             "reason": reason,
             "percentiles_usable": state == "valid",
+            "censored": is_censored,
+            "statistic_scope": "time_to_termination" if is_censored else "observed_metric",
+            "completion_mean_usable": not is_censored,
+            "workload_claims_supported": sizing_ok,
         }
 
     return validity
@@ -250,6 +357,8 @@ def build_provenance(
             "schema_version": profile.schema_version,
             "sha256": profile.source_sha256,
             "planned_requests": planned,
+            "requested_input_tokens": profile.input_tokens,
+            "requested_max_output_tokens": profile.max_output_tokens,
         },
         "client": {
             **client.to_dict(),
@@ -278,6 +387,7 @@ def build_provenance(
             "difference": actual - planned,
         },
         "tokens": tokens,
+        "completion": completion_summary(results.trials),
         "cost_preflight": cost_preflight(
             deployment, profile, ceiling_usd=max_usd_ceiling
         ),
@@ -323,9 +433,10 @@ def build_report(
     if client_profile.use_server_token_count:
         limitations.append(
             "Token counts come from provider-reported usage, so the throughput "
-            "denominator is authoritative for the served model. The client "
-            "tokenizer was not used, so delivered workload size is not "
-            "independently verified against the requested target."
+            "denominator is authoritative for the served model. No independent "
+            "client tokenizer ran, so client-versus-provider agreement was not "
+            "observed. Workload sizing is instead checked as provider-versus-target "
+            "conformance against the profile's requested input size."
         )
 
     if results.benchmark_failed:
@@ -334,21 +445,61 @@ def build_report(
             "failure, not a measured result."
         )
 
-    # Invariant: workload token sizing must be verified against provider usage
-    # before any token-normalized claim. Driven by the accounting verdict rather
-    # than by parsing note strings.
+    # Workload claims require verified sizing; provider-token observations of
+    # the delivered workload remain separate from that qualification.
     sizing = token_sizing_summary(trials)
     if sizing["outside_tolerance"]:
         limitations.append(
-            "Client-side and provider-reported input token counts disagree materially. "
-            "Token-normalized metrics are marked invalid for this run. Latency and other "
+            "Workload token sizing failed its authoritative check for this run. "
+            "Requested-size claims are unsupported; provider-token throughput remains "
+            "an observation of the delivered workload. Client-tokenized throughput "
+            "requires independent token agreement. Latency and other "
             "directly observed timings remain usable and are marked valid individually."
         )
     elif sizing["unverifiable"] and not sizing["within_tolerance"]:
         limitations.append(
-            "Workload token sizing could not be verified against provider-reported usage. "
-            "Token-normalized performance and long-context claims are not supported."
+            "Workload token sizing could not be verified. Requested-size and "
+            "long-context claims are unsupported; provider-token observations retain "
+            "their recorded provenance."
         )
+
+    completion = completion_summary(trials)
+    if completion["ceiling_truncated"]:
+        censored = completion["latency_censored_fraction"]
+        share = f"{censored:.0%}" if isinstance(censored, float) else "some"
+        limitations.append(
+            f"{completion['ceiling_truncated']} of {completion['protocol_completed_trials']} "
+            f"completed trials ({share}) stopped at the configured output ceiling "
+            "(`finish_reason: length`). Those trials did not finish naturally, so "
+            "`request_latency` is a right-censored lower bound on time-to-completion and "
+            "is marked as censored. Time-to-first-token is unaffected. Success counters "
+            "exclude these trials and report them as `truncated_trials`."
+        )
+
+    telemetry = provider_telemetry_summary(trials)
+    if telemetry["reasoning_only_completions"]:
+        limitations.append(
+            f"{telemetry['reasoning_only_completions']} completed trial(s) spent the entire "
+            "completion budget on provider-reported reasoning tokens and emitted no visible "
+            "answer content. Output throughput in this run describes reasoning-token "
+            "emission, not answer generation."
+        )
+    if telemetry["metrics"]["cache_write_tokens"]["trials_reporting"]:
+        limitations.append(
+            "Cache-write counts are not exposed by AIPerf 0.13.0 as a metric. They were "
+            "recovered from the raw streamed `usage.prompt_tokens_details."
+            "created_cache_tokens` field and are labelled with that source. Cache-read "
+            "counts come from AIPerf's normalized `usage_prompt_cache_read_tokens` metric."
+        )
+
+    sizing = token_sizing_summary(trials)
+    completion = completion_summary(trials)
+    metrics = _metric_snapshot(results.summary)
+    accounting_source = (
+        ACCOUNTING_PROVIDER_USAGE
+        if client_profile.use_server_token_count
+        else "client_tokenizer"
+    )
 
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
@@ -368,12 +519,16 @@ def build_report(
         "benchmark_failed": results.benchmark_failed,
         "counters": results.counters.to_dict(),
         "outcomes": outcome_summary(trials),
-        "metrics": _metric_snapshot(results.summary),
-        "token_accounting": token_sizing_summary(trials),
+        "metrics": metrics,
+        "token_accounting": sizing,
+        "completion": completion,
+        "provider_telemetry": provider_telemetry_summary(trials),
         "metric_validity": assess_metric_validity(
-            metrics=_metric_snapshot(results.summary),
-            sizing=token_sizing_summary(trials),
+            metrics=metrics,
+            sizing=sizing,
             successful_trials=results.counters.succeeded,
+            accounting_source=accounting_source,
+            completion=completion,
         ),
         "provenance": provenance,
         "notes": list(results.notes),
@@ -389,6 +544,13 @@ def write_report(path: Path, report: dict[str, Any]) -> str:
 
 
 def load_report(path: Path) -> dict[str, Any]:
+    """Load a report, refusing schemas this reader does not understand.
+
+    Reports written before the provider-versus-target split are still readable so
+    existing evidence is not orphaned, but they are labelled `legacy` because
+    their `sizing_verified` field came from a comparison that was circular under
+    provider accounting. A legacy report is never silently upgraded.
+    """
     if not path.is_file():
         raise ReportError(f"report does not exist: {path}")
     try:
@@ -397,11 +559,22 @@ def load_report(path: Path) -> dict[str, Any]:
         raise ReportError(f"report `{path}` is not valid JSON: {error}") from error
     if not isinstance(document, dict):
         raise ReportError(f"report `{path}` is not a JSON object")
-    if document.get("schema_version") != REPORT_SCHEMA_VERSION:
+    schema = document.get("schema_version")
+    if schema not in READABLE_REPORT_SCHEMA_VERSIONS:
         raise ReportError(
-            f"report schema `{document.get('schema_version')}` is not "
-            f"`{REPORT_SCHEMA_VERSION}`"
+            f"report schema `{schema}` is not one of "
+            f"{', '.join(READABLE_REPORT_SCHEMA_VERSIONS)}"
         )
+    if schema in LEGACY_REPORT_SCHEMA_VERSIONS:
+        document["legacy_schema"] = True
+        document["legacy_reason"] = (
+            f"report schema {schema} predates the separation of provider-versus-target "
+            "conformance from client-versus-provider agreement; its `sizing_verified` "
+            "field must not be read as an independent verification under provider "
+            "accounting"
+        )
+    else:
+        document.setdefault("legacy_schema", False)
     return document
 
 
@@ -410,6 +583,9 @@ def compare_reports(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict
 
     Different client profiles, deployments, or profiles are not comparable as
     performance evidence, and mismatched engine versions are refused outright.
+    A differing token-accounting source is also refused: one report's denominators
+    are provider-authoritative and the other's are client-tokenized, so their
+    throughput figures answer different questions.
     """
     for field in ("deployment_key", "profile_name"):
         if baseline.get(field) != candidate.get(field):
@@ -425,6 +601,12 @@ def compare_reports(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict
         raise ReportError(
             "cannot compare: client profiles differ; baseline and affinity-enabled "
             "experiments are separate result identities"
+        )
+    if base_client.get("use_server_token_count") != cand_client.get("use_server_token_count"):
+        raise ReportError(
+            "cannot compare: token accounting source differs "
+            f"({base_client.get('token_accounting_source')} vs "
+            f"{cand_client.get('token_accounting_source')})"
         )
     base_engine = baseline.get("engine", {})
     cand_engine = candidate.get("engine", {})
@@ -470,6 +652,28 @@ def compare_reports(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict
             ),
         }
 
+    censoring = {
+        "baseline": (baseline.get("completion") or {}).get("latency_censored_fraction"),
+        "candidate": (candidate.get("completion") or {}).get("latency_censored_fraction"),
+    }
+    limitations = [
+        "A delta is not a qualification verdict. Thresholds are profile-specific "
+        "and require calibration.",
+        "Comparisons remain valid only for the same deployment, profile, client "
+        "profile, and engine version.",
+    ]
+    if any(value for value in censoring.values()):
+        limitations.append(
+            "At least one side has output-ceiling-censored latency. A latency delta "
+            "between differently-censored runs compares two different truncation "
+            "points, not two completion times."
+        )
+    if baseline.get("legacy_schema") or candidate.get("legacy_schema"):
+        limitations.append(
+            "At least one report uses a legacy schema whose token-sizing verdict is "
+            "not independent under provider accounting."
+        )
+
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
         "baseline_run_id": baseline.get("run_id"),
@@ -480,13 +684,9 @@ def compare_reports(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict
             "baseline": baseline.get("counters"),
             "candidate": candidate.get("counters"),
         },
+        "censoring": censoring,
         "metric_deltas": deltas,
-        "limitations": [
-            "A delta is not a qualification verdict. Thresholds are profile-specific "
-            "and require calibration.",
-            "Comparisons remain valid only for the same deployment, profile, client "
-            "profile, and engine version.",
-        ],
+        "limitations": limitations,
     }
 
 

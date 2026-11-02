@@ -34,7 +34,10 @@ from .report import (
     load_report,
     write_report,
 )
+from .reprocess import ReprocessError, reprocess_run
 from .trials import (
+    ACCOUNTING_CLIENT_TOKENIZER,
+    ACCOUNTING_PROVIDER_USAGE,
     WORKLOAD_LIVE_TURN_CONFORMANCE,
     WORKLOAD_RECORDED_MULTI_TURN_REPLAY,
     WORKLOAD_SYNTHETIC_SINGLE_TURN,
@@ -150,6 +153,20 @@ def build_parser() -> argparse.ArgumentParser:
     compare_parser = subparsers.add_parser("compare", help="compare two completed runs")
     compare_parser.add_argument("--baseline", type=Path, required=True)
     compare_parser.add_argument("--candidate", type=Path, required=True)
+
+    reprocess_parser = subparsers.add_parser(
+        "reprocess",
+        help=(
+            "re-derive a completed run's evidence from its original artifacts without "
+            "re-executing anything; writes to a new directory"
+        ),
+    )
+    reprocess_parser.add_argument(
+        "--run", type=Path, required=True, help="completed run directory (read-only)"
+    )
+    reprocess_parser.add_argument(
+        "--out", type=Path, required=True, help="new directory for the corrected evidence"
+    )
 
     return parser
 
@@ -315,8 +332,11 @@ def main(argv: list[str] | None = None) -> int:
         if arguments.command == "compare":
             return _command_compare(arguments)
 
+        if arguments.command == "reprocess":
+            return _command_reprocess(arguments)
+
         parser.error(f"unhandled command `{arguments.command}`")
-    except (RegistryError, ProfileError, AiperfError, ReportError) as error:
+    except (RegistryError, ProfileError, AiperfError, ReportError, ReprocessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     return 0
@@ -536,6 +556,11 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
         profile_name=profile.name,
         target_input_tokens=profile.input_tokens,
         token_tolerance_pct=profile.token_tolerance_pct,
+        accounting_source=(
+            ACCOUNTING_PROVIDER_USAGE
+            if client.use_server_token_count
+            else ACCOUNTING_CLIENT_TOKENIZER
+        ),
     )
     trials_sha = write_trials_jsonl(run_dir / "trials.jsonl", results.trials)
     provenance = build_provenance(
@@ -601,6 +626,23 @@ def _command_compare(arguments: argparse.Namespace) -> int:
     baseline = load_report(arguments.baseline / "report.json")
     candidate = load_report(arguments.candidate / "report.json")
     _json_print(compare_reports(baseline, candidate))
+    return 0
+
+
+def _command_reprocess(arguments: argparse.Namespace) -> int:
+    """Correct a published run's normalized evidence without re-executing it."""
+    correction = reprocess_run(arguments.run, arguments.out)
+    _json_print(
+        {
+            "source_run_id": correction["source_run_id"],
+            "accounting_source": correction["accounting_source"],
+            "counters_before": correction["counters_before"],
+            "counters_after": correction["counters_after"],
+            "aggregate_field_changes": len(correction["aggregate_field_changes"]),
+            "unrecoverable": len(correction["unrecoverable"]),
+            "out": str(arguments.out),
+        }
+    )
     return 0
 
 

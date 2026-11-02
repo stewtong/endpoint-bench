@@ -401,3 +401,45 @@ def test_token_accounting_selects_the_server_accounting_client(
 
     # Reaching this point at all proves the option is wired past the guard.
     assert exit_code in (0, 1)
+
+
+def test_reprocess_command_is_registered_and_dispatches(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The command must be reachable through argparse, not only as a function.
+
+    A previous defect had a handler read an option argparse never registered, so
+    new commands are exercised through `main` rather than called directly.
+    """
+    from test_measurement_integrity import _legacy_run
+
+    run_dir = _legacy_run(tmp_path)
+    out = tmp_path / "corrections"
+
+    assert main(["reprocess", "--run", str(run_dir), "--out", str(out)]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["accounting_source"] == "provider_usage"
+    assert payload["counters_after"]["truncated_trials"] == 20
+    assert (out / "correction.json").is_file()
+
+
+def test_reprocess_command_reports_a_guard_violation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from test_measurement_integrity import _legacy_run
+
+    run_dir = _legacy_run(tmp_path)
+
+    exit_code = main(["reprocess", "--run", str(run_dir), "--out", str(run_dir / "x")])
+
+    assert exit_code == 2
+    assert "refusing to write inside" in capsys.readouterr().err
+
+
+def test_reprocess_requires_both_paths() -> None:
+    from endpoint_bench.cli import build_parser
+
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["reprocess", "--run", "only-one"])

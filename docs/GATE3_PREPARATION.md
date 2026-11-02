@@ -3,7 +3,7 @@
 **Version:** 0.1.0
 **Datestamp:** 2026-11-01
 **Source:** Gate 2 verified state, live smoke and tool-call runs, the local-mock trace-replay demonstration, and the six-cell screening matrix.
-**Status:** Screening matrix executed 2026-11-02; results in [`GATE3_RESULTS.md`](GATE3_RESULTS.md). Screening is not qualification.
+**Status:** Screening matrix executed 2026-11-02; results in [`GATE3_RESULTS.md`](GATE3_RESULTS.md), with three harness defects corrected in [`GATE3_RESULTS_CORRECTION_1.md`](GATE3_RESULTS_CORRECTION_1.md). Screening is not qualification.
 **Update rule:** Replace plan values with measured evidence as each experiment runs. Do not restate unexecuted work as complete.
 
 This document records the three Gate 3 priorities, what is implemented, what is only planned, and what remains blocked. Nothing here is a benchmark result.
@@ -53,7 +53,9 @@ Latency remains usable while token-normalized throughput is withheld. That is th
 
 ### Remaining attribution gap
 
-The root cause of the mismatch is known but not eliminated: the client tokenizer identity does not match the served model. Resolving it requires either a model-specific tokenizer or provider-reported token counts as the accounting source. Neither is implemented. Until then, token-normalized metrics stay `invalid_token_sizing` on any endpoint whose tokenizer differs from `builtin`.
+The root cause of the mismatch is known but not eliminated: the client tokenizer identity does not match the served model. Resolving it requires either a model-specific tokenizer or provider-reported token counts as the accounting source. Neither is implemented.
+
+What did change is that the two questions are no longer conflated. Provider accounting answers *did the provider see the requested workload size?* — measured at 1.16–3.99% across the screening cells, and verified independently of any client count. It does not answer *does a client tokenizer agree with the provider?*, and it structurally cannot, because no client tokenizer runs in that mode. That second question is now reported as `not_observed` rather than answered by comparing a number with itself. See [`GATE3_RESULTS_CORRECTION_1.md`](GATE3_RESULTS_CORRECTION_1.md) for how the earlier circular verdict arose.
 
 ## 2. Reproducible local benchmark
 
@@ -169,8 +171,13 @@ Not started, by instruction: cache experiments, 100K–1M context expansion, ext
 
 ## Open blockers
 
-1. **Tokenizer identity.** Token-normalized metrics stay invalid on any endpoint whose tokenizer differs from `builtin`. No model-specific tokenizer is wired in.
-2. **Probe authorization path.** `probe` refuses non-loopback targets, so the prepared tool-call test has no approved execution route yet.
-3. **Pricing provenance.** The recorded rate came from a rendered public catalog page, not a billing contract. Re-verify before any run materially larger than screening.
-4. **Linux and CI verification.** The expanded CI workflow has been replayed locally on macOS only. A passing GitHub Actions run requires an owner-authorized push.
+1. **Tokenizer identity.** Under provider accounting the sizing question that matters is answered, but tokenizer identity itself stays unverified because no client tokenizer runs. Under client accounting the built-in tokenizer is known to differ from this model's, so a tokenizer-mismatch claim is still unsupported in that mode. No model-specific tokenizer is wired in.
+2. **Completion ceiling calibration.** The 256-token ceiling used by the screening profiles truncated 117 of 120 responses. The natural completion length observed in the 3 uncut trials was 217–249 tokens, so 256 sat at the boundary rather than above it. `qualification-10k` uses 1024; it has not been executed.
+3. **No ratified performance threshold.** The SLO contract in [`qualification/`](qualification/) can only return `inconclusive` until an operator supplies a requirement or a disjoint calibration window is designated. A benchmark must not set its own pass mark.
+4. **Pricing provenance.** The recorded rate came from a rendered public catalog page, not a billing contract. Re-verify before any run materially larger than screening.
 5. **Context claims.** 32K screening exercises real context sizes but establishes nothing about the advertised 1M window.
+
+Resolved since the previous revision:
+
+- **Probe authorization path.** `probe --authorize-live` now permits a non-loopback target explicitly, and the prepared tool-call test ran.
+- **Linux and CI verification.** The expanded workflow has passed on GitHub Actions on Linux, including the engine-integration job with AIPerf installed.

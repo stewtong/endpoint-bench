@@ -17,7 +17,7 @@ This project focuses on those operational properties. It treats broad model qual
 
 The implementation covers provider configuration, workload profiles, AIPerf orchestration, trace replay, protocol conformance probes, normalized evidence with per-metric validity, and comparative reporting. Cache measurement, long-context qualification, multi-window reliability, and AA synchronization remain unimplemented.
 
-**Project version:** software `0.1.0` (benchmark MVP); specification/methodology `0.5.1`; result schema `0.1.0`; profile schema `1.0`; pinned engine AIPerf `0.13.0`.
+**Project version:** software `0.1.2` (benchmark MVP); specification/methodology `0.5.3`; result schema `0.2.0`; profile schema `1.0`; pinned engine AIPerf `0.13.0`.
 
 ## Current status
 
@@ -33,6 +33,10 @@ The implementation covers provider configuration, workload profiles, AIPerf orch
 | Report and comparison commands | Implemented |
 | Metric-specific validity states | Implemented |
 | Provider token accounting | Implemented (`--token-accounting server`) |
+| Provider versus target sizing conformance | Implemented, separate from client-versus-provider |
+| Completion classification from `finish_reason` | Implemented |
+| Provider cache-read, cache-write, reasoning telemetry | Implemented |
+| Artifact reprocessing and versioned corrections | Implemented (`reprocess`) |
 | CLI entry point | Implemented |
 | Tests and CI | Implemented, green on GitHub Actions |
 | Tool-call round-trip probes | Implemented, verified offline and live |
@@ -44,9 +48,11 @@ The implementation covers provider configuration, workload profiles, AIPerf orch
 | Multi-window reliability | Planned |
 | AA metadata import | Planned |
 
-**There are screening measurements but no qualification.** Six screening cells against one deployment — 1K/10K/32K at concurrency 1 and 2, 120 trials, zero failures — are recorded in [`docs/GATE3_RESULTS.md`](docs/GATE3_RESULTS.md). That evidence is single-window and 20 samples per cell. It supports none of the following: a qualification verdict, percentile claims, capacity, reliability, cache behaviour, or a comparison between sizing or concurrency cells. One live tool-call continuation also passed.
+**There are screening measurements but no qualification.** Six screening cells against one deployment — 1K/10K/32K at concurrency 1 and 2, 120 trials, zero endpoint failures — are recorded in [`docs/GATE3_RESULTS.md`](docs/GATE3_RESULTS.md), with three harness defects corrected from the original artifacts in [`docs/GATE3_RESULTS_CORRECTION_1.md`](docs/GATE3_RESULTS_CORRECTION_1.md). That evidence is single-window, 20 samples per cell. It supports none of the following: a qualification verdict, percentile claims, completion latency, capacity, reliability, cache behaviour, or a comparison between sizing or concurrency cells. One live tool-call continuation also passed.
 
-No endpoint has been qualified or failed. Qualification requires calibrated thresholds and multi-window evidence, which do not exist yet.
+The correction matters for reading the numbers: **117 of the 120 "successful" trials actually stopped at the 256-token output ceiling**, so their latency is time-to-ceiling rather than time-to-completion. Three trials completed naturally. The corrected counts are `truncated_trials: 117`, `successful_trials: 3`.
+
+No endpoint has been qualified or failed. Qualification requires ratified thresholds and multi-window evidence. A contract defining what evidence would earn a verdict is in [`docs/qualification/`](docs/qualification/), and it currently returns `inconclusive` because no performance threshold has been ratified by anyone — a benchmark must not set its own pass mark.
 
 ## Quickstart
 
@@ -171,15 +177,31 @@ Supply credentials only through the environment variable named in the registry. 
 
 ## Benchmark profiles
 
-Five profile families ship in [`configs/profiles/`](configs/profiles). Each declares request count, target input size, output ceiling, concurrency, an explicit timeout, and a token-sizing tolerance:
+Profile families ship in [`configs/profiles/`](configs/profiles). Each declares request count, target input size, output ceiling, concurrency, an explicit timeout, and a token-sizing tolerance:
 
 - **Smoke:** protocol and configuration compatibility, 2 requests.
 - **Quick:** low-cost screening, 20 requests.
 - **Standard:** repeated performance and concurrency observations, 200 requests.
 - **Long context:** accepted-versus-demonstrated context, requiring explicit authorization.
 - **Reliability:** multi-window stability and failure accounting, 300 requests.
+- **Screening 1K/10K/32K:** the three sizes in the executed screening matrix, 20 requests, 256-token output ceiling.
+- **Qualification 10K:** the same workload as screening-10K with a 1024-token output ceiling, sized from the measured natural completion length. One cell in a multi-window design; see [`docs/qualification/`](docs/qualification/).
 
 Thresholds are marked provisional and uncalibrated. Low-cost screening is not endpoint qualification, which requires sufficient samples, temporal coverage, and profile-specific thresholds.
+
+## Correcting published evidence
+
+When a harness defect is found after results are published, the evidence is re-derived from the original artifacts rather than overwritten and rather than re-measured:
+
+```bash
+uv run endpoint-bench reprocess \
+  --run ~/.endpoint-bench/screening/run-bf8f644479e6 \
+  --out ~/.endpoint-bench/corrections/run-bf8f644479e6
+```
+
+This reads the completed run read-only, re-parses its AIPerf artifacts with current logic, and writes a new directory containing a corrected `report.json` plus a `correction.json` that records every changed field, concrete before/after samples, the SHA-256 of each source artifact, and the observations that cannot be recovered at all. It refuses to write inside the source directory.
+
+A reprocess never sends a request and never claims a field the original artifacts do not support. See [`docs/GATE3_RESULTS_CORRECTION_1.md`](docs/GATE3_RESULTS_CORRECTION_1.md) for a worked example against six published cells.
 
 ## Interpreting results
 
@@ -194,7 +216,11 @@ Never compare endpoints across undisclosed model revisions, client settings, tra
 
 - No endpoint has been qualified. Screening evidence only, from one window.
 - Cache measurement, long-context qualification, multi-window reliability, and AA import are not implemented.
-- The built-in tokenizer does not match every hosted model; on this endpoint it differed from provider-reported usage by 25-29% at a 128-token workload. Use `--token-accounting server` there, which makes the denominator authoritative but stops verifying delivered target size.
+- The built-in tokenizer does not match every hosted model; on this endpoint it differed from provider-reported usage by 25-29% at a 128-token workload. `--token-accounting server` makes the denominator authoritative, but no client tokenizer then runs, so tokenizer identity stays unverified rather than resolved.
+- Under provider accounting, delivered workload size is checked as provider-versus-target conformance. That is a different check from client-versus-provider agreement, and the two are never reported as one.
+- A response that stops at the configured output ceiling is counted as truncated, not successful, and its latency is reported as censored. Six screening cells ran at 90-100% truncation with a 256-token ceiling, which is why they support no completion-latency claim.
+- Output throughput counts completion tokens, which for reasoning-capable models are mostly reasoning. In the screening cells 87-100% of completion tokens were reasoning; visible answer content was near zero.
+- Cache-write counts are not an AIPerf 0.13.0 metric. They are recovered from the raw streamed provider usage and labelled with that source. Cache telemetry is not a cache measurement.
 - Traces are replayed, never executed as live agent tool loops. Replay measures traffic shape, not agent behaviour.
 - Public shared capacity and provider revisions can change independently of model identity.
 - API telemetry, token accounting, cache state, and context behavior vary by provider.
@@ -206,3 +232,5 @@ Never compare endpoints across undisclosed model revisions, client settings, tra
 Development setup and repository conventions are in [`CONTRIBUTING.md`](CONTRIBUTING.md). Security expectations and reporting are in [`SECURITY.md`](SECURITY.md).
 
 The project is released under the MIT License. See [`LICENSE`](LICENSE).
+
+Measurement-integrity follow-up: [Correction 2](docs/GATE3_RESULTS_CORRECTION_2.md) preserves the prior correction and adds stricter stream/completion validation, delivered-workload metric provenance, and censored-latency semantics. The [repeat plan](docs/gate3-plans/multiwindow-10k.json) is exploratory and requires separate paid-execution authorization. The SLO contract is a draft specification, not an implemented evaluator.

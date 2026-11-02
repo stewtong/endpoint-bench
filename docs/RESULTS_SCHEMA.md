@@ -1,6 +1,13 @@
 # Result schema contract
 
-**Schema version:** `0.1.0` — dry-run manifests, probe manifests, normalized trial records, and run reports. Trial records and reports carry their own document versions so each can evolve independently.
+**Schema version:** `0.2.0` — dry-run manifests, probe manifests, normalized trial records, and run reports. Trial records and reports carry their own document versions so each can evolve independently.
+
+Version history:
+
+| Version | Change |
+|---|---|
+| `0.1.0` | Initial contract. |
+| `0.2.0` | Split token sizing into provider-versus-target conformance and client-versus-provider agreement; added completion classification (`finish_class`, `truncated_trials`); added `provider_telemetry`; added `evidence_gaps`; added reprocess artefacts. Schema `0.1.0` reports are readable but marked `legacy_schema: true`, because their `sizing_verified` verdict came from a comparison that was circular under provider accounting. |
 
 ## Principles
 
@@ -10,6 +17,7 @@
 4. Lifecycle and outcome are separate fields, not one mutually exclusive status.
 5. Configuration, fixture, methodology, code, and engine versions are retained.
 6. Raw provider responses are sanitized before export; AA snapshots remain restricted unless rights permit publication.
+7. A comparison must name both sides. A verdict that does not say which two quantities were compared is not evidence.
 
 ## Dry-run manifest
 
@@ -70,35 +78,78 @@ Written to `<run-dir>/trials.jsonl`, one JSON object per line, carrying `schema_
 | `attempts` | Per-attempt records with status and error type. |
 | `timing` | `ttft_ms` and `duration_ms`, `null` when unobservable. |
 | `usage` | `input_tokens`, `output_tokens`, `total_tokens`, `null` when the provider reported none. |
-| `finish_reason` | Provider finish reason, `null` when absent. |
-| `attribution` | Who is responsible for a failed outcome: `provider`, `model`, `harness`, or `unknown`. A model that answers instead of calling a required tool is `model`, not a broken endpoint. |
-| `token_accounting` | Four distinct token measures; see below. |
+| `completion` | `finish_reason`, `finish_class`, and `requested_max_completion_tokens`. See below. |
+| `attribution` | Who is responsible for a failed outcome: `provider`, `model`, `harness`, or `unknown`. A model that answers instead of calling a required tool is `model`, not a broken endpoint; a response cut by our own output ceiling is `harness`, not a provider defect. |
+| `token_accounting` | Two independent sizing comparisons; see below. |
+| `provider_telemetry` | Provider cache and reasoning token counts; see below. |
+| `evidence_gaps` | Enumerated missing observations: `http_status_unobserved`, `finish_reason_unobserved`, `usage_unobserved`. Enumerated so a report can count them instead of grepping prose. |
 | `notes` | Explicit caveats, such as a client-vs-provider token count discrepancy. |
+
+### Completion classification
+
+`finish_reason` is recovered from the raw streamed response, joined to the normalized record by `x_request_id`. It is mapped to a terminal class:
+
+| `finish_class` | Meaning | Outcome |
+|---|---|---|
+| `natural` | Server stopped on its own: `stop`, `end_turn`, `tool_calls`, … | `success` |
+| `ceiling` | Server stopped at our `max_completion_tokens`: `length`, `max_tokens` | `output_truncated`, attribution `harness` |
+| `content_filter` | Server stopped on a content policy | `protocol_failure`, attribution `provider` |
+| `absent` | No terminal reason in the stream | `stream_interrupted` when the stream also ended without its done sentinel, else `protocol_failure` |
+| `unknown` | A terminal reason outside the known vocabulary | `unknown`, attribution `provider` |
+
+A terminal `finish_reason` outside the known vocabulary is reported rather than assumed natural. `requested_max_completion_tokens` records the ceiling the request actually carried, which is what makes a ceiling truncation attributable to our own configuration rather than to the endpoint.
 
 ### Token accounting
 
-Four measures are retained separately and never collapsed:
+The measures are retained separately and never collapsed:
 
 | Field | Meaning |
 |---|---|
+| `accounting_source` | `client_tokenizer` or `provider_usage`. Which side produced the engine's token metrics. |
 | `target_input_tokens` | The workload size the profile asked for. |
-| `client_estimated_input_tokens` | What the client tokenizer counted in the serialized request. |
-| `provider_input_tokens` | What the provider reported in `usage`. |
-| `observed_output_tokens` | What the client counted in the response. |
-| `discrepancy_pct` | Relative difference between client estimate and provider report. |
-| `sizing_verified` | `true` within `tolerance_pct`, `false` outside it, `null` when unverifiable. |
+| `client_estimated_input_tokens` | What the client tokenizer counted in the serialized request. `null` under provider accounting. |
+| `provider_input_tokens` | What the provider reported in `usage.prompt_tokens`. |
+| `provider_output_tokens` | The provider's `usage.completion_tokens`. |
+| `observed_output_tokens` | What the client counted in the response. `null` under provider accounting. |
+| `client_estimate_note` | Why a client measure is absent, when it is. |
+| `provider_vs_target` | `{discrepancy_pct, verdict}` — did the provider see the requested workload size? |
+| `client_vs_provider` | `{discrepancy_pct, verdict}` — does an independent client tokenizer agree with the provider? |
+| `discrepancy_pct` | Retained name for the client-versus-provider difference. |
+| `tolerance_pct` | Profile tolerance applied to both comparisons. |
+| `primary_check` | Which comparison governs the verdict: `client_vs_provider` under client accounting, `provider_vs_target` under provider accounting. |
+| `sizing_verified` | Boolean form of `primary_check`'s verdict: `true` verified, `false` failed, `null` unverifiable. |
+
+Verdict states are `verified`, `failed`, `unverifiable`, and `not_observed`.
+
+The anti-circularity rule is enforced at construction: under provider accounting, AIPerf derives `input_sequence_length` and `output_sequence_length` from provider usage, so attaching a client estimate raises `TrialSchemaError`. Comparing those fields to `usage_prompt_tokens` would compare a number with itself, which is how schema `0.1.0` reported `discrepancy_pct: 0.0` and `sizing_verified: true` on every trial regardless of what the provider received.
 
 `null` is never a pass. A single unverified or out-of-tolerance trial withholds support for token-normalized claims. No correction factor is ever applied to a reported count; the provider's number is preserved verbatim.
+
+### Provider telemetry
+
+| Field | Meaning | Source |
+|---|---|---|
+| `cache_read_tokens` | Prompt tokens served from cache. | AIPerf `usage_prompt_cache_read_tokens`, else raw `cached_tokens`. |
+| `cache_write_tokens` | Prompt tokens written to cache. | Raw `usage.prompt_tokens_details.created_cache_tokens` only — AIPerf 0.13.0 exposes no metric for this. |
+| `reasoning_tokens` | Provider-reported reasoning tokens. | AIPerf `usage_reasoning_tokens`, else raw. |
+| `visible_output_tokens` | `provider_output_tokens − reasoning_tokens`. | Derived. `0` means the entire budget was reasoning. |
+| `sources` | Per-field provenance: `aiperf_metric`, `raw_response_usage`, or the derivation used. | — |
+
+Absent stays `null` and is never rendered as zero. A zero the provider actually sent is preserved as a real observation. Run-level aggregates publish `sum` next to `trials_reporting` and `trials_total` so a partial total cannot be mistaken for a complete one.
 
 Invariants enforced before any trial is counted:
 
 - `successful_trials <= protocol_completed_trials <= started_trials <= planned_trials`;
+- `truncated_trials <= protocol_completed_trials`;
+- `successful_trials + truncated_trials + failed_trials == started_trials`;
 - a `success` outcome requires `protocol_completed`;
+- a `success` outcome requires an observed 2xx HTTP status; body content alone cannot establish success;
+- a `success` outcome may not carry a `ceiling` finish class;
 - a `skipped` trial may not record HTTP attempts;
 - a `planned`-only trial may not record HTTP attempts;
 - `started` and `transport_completed` require at least one HTTP attempt.
 
-`failed_trials` counts every started trial that neither succeeded nor was cancelled. It is broader than endpoint-attributable failure on purpose: a transport error fails the trial regardless of cause. Per-outcome attribution is reported separately under `outcomes`.
+`failed_trials` counts every started trial that neither succeeded, was ceiling-truncated, nor was cancelled. It is broader than endpoint-attributable failure on purpose: a transport error fails the trial regardless of cause. Ceiling truncation is excluded because it is caused by our own `max_completion_tokens`, not by the endpoint, and folding it into `failed` would report a harness configuration choice as a provider defect.
 
 ## Run report
 
@@ -108,13 +159,22 @@ Written to `<run-dir>/report.json` by `endpoint-bench run`, and comparable by `e
 |---|---|
 | `client_profile` | Explicit client configuration plus a stable `identity` hash. Baseline and affinity-enabled profiles are distinct identities. `token_accounting_source` is `client_tokenizer` or `provider_usage`. |
 | `engine` | AIPerf version, summary schema version, and whether the schema was validated before parsing. |
-| `benchmark_failed` | True when the run produced no successful responses. Distinct from an integration failure. |
-| `counters`, `outcomes` | Accounting as above. |
-| `metrics` | Selected AIPerf metrics with `unit` preserved. Absent metrics stay absent. |
-| `token_accounting` | Aggregate sizing verdict. `claims_supported` is false unless every evaluated trial is within tolerance. |
-| `provenance` | Engine, deployment, profile, client, affinity mode, timeout and retry policy, planned-versus-actual request reconciliation, termination, and run-relative artifact locations. |
-| `metric_validity` | Per-metric usability: `valid`, `valid_mean_only`, `invalid_token_sizing`, `invalid_client_tokenization`, `not_observed`. A token-sizing problem does not invalidate latency evidence. |
-| `limitations` | Interpretation restrictions, including unvalidated schema. |
+| `benchmark_failed` | True when the endpoint produced nothing scoreable: no successful responses *and* no ceiling-truncated ones. A run in which every response was cut by our own output ceiling is not a benchmark failure — it measured real time-to-first-token and token rates — and is reported as truncated with censoring limitations instead. |
+| `counters`, `outcomes` | Accounting as above, including `truncated_trials`. |
+| `metrics` | Selected AIPerf metrics with `unit` preserved. Absent metrics stay absent. Includes provider cache-read and reasoning metrics where AIPerf emitted them. |
+| `token_accounting` | Aggregate sizing verdict over both comparisons. `claims_supported` is false unless every trial's authoritative check is verified. |
+| `completion` | `natural_completions`, `ceiling_truncated`, `content_filtered`, `finish_reason_absent`, `finish_reason_unknown`, `finish_reason_counts`, and `latency_censored` with `latency_censored_fraction`. |
+| `provider_telemetry` | Aggregate cache-read, cache-write, reasoning, and visible-output totals with per-field reporting counts. |
+| `provenance` | Engine, deployment, profile, client, affinity mode, timeout and retry policy, planned-versus-actual request reconciliation, completion summary, termination, and run-relative artifact locations. |
+| `metric_validity` | Per-metric usability: `valid`, `valid_mean_only`, `censored`, `invalid_token_sizing`, `invalid_client_tokenization`, `not_observed`, plus a `censored` flag. A token-sizing problem does not invalidate latency evidence. |
+| `limitations` | Interpretation restrictions, including unvalidated schema, ceiling censoring, reasoning-only completions, and cache-write provenance. |
+| `legacy_schema` | Present after loading: `true` for schema `0.1.0` reports, with a `legacy_reason`. A legacy report is never silently upgraded. |
+
+### Censoring
+
+A trial that stopped at the configured output ceiling did not finish. Its `request_latency` is the time it took to reach the ceiling, which is a lower bound on the time a natural completion would have taken. `metric_validity.request_latency.censored` is `true` whenever any completed trial was ceiling-truncated, and the reason string states the share.
+
+`time_to_first_token` is not censored: the first token arrives long before any ceiling applies.
 
 ### Workload types
 
@@ -127,69 +187,49 @@ Every run declares exactly one workload type, because they are not interchangeab
 | `live_turn_conformance` | Deterministic protocol checks, not an intelligence evaluation. |
 | `framework_agent_execution` | Reserved; not implemented in this phase. |
 
-`compare` refuses to produce deltas when deployment, profile, client profile identity, engine version, or schema validation differ. A delta is never a qualification verdict.
+`compare` refuses to produce deltas when deployment, profile, client profile identity, engine version, or schema validation differ. It also refuses when the token accounting source differs, because one report's denominators are provider-authoritative and the other's are client-tokenized. A delta is never a qualification verdict.
 
-## Planned trial schema
+## Reprocess correction artifact
 
-Live trial records will retain:
+Written to `<out-dir>/correction.json` by `endpoint-bench reprocess`, alongside a corrected `report.json`. Schema `1.0`.
 
-### Identity and configuration
+| Field | Semantics |
+|---|---|
+| `correction_type` | `artifact_reprocess`. |
+| `source_run_id`, `source_run_dir_name` | The run this correction re-derives. The source directory is read-only and the command refuses to write inside it. |
+| `source_report_schema_version`, `corrected_report_schema_version` | What was superseded and what replaced it. |
+| `accounting_source` | Recovered from the source report, because it determines which sizing check applies. |
+| `source_artifact_sha256` | SHA-256 of every source artifact read, so the correction is bound to exact inputs. |
+| `counters_before`, `counters_after` | Aggregate accounting, before and after. |
+| `aggregate_field_changes` | Run-level fields that changed. |
+| `per_trial_field_changes` | Change counts per field across all trials. |
+| `per_trial_samples` | Up to twelve concrete before/after examples, for auditability. |
+| `completion`, `token_accounting`, `provider_telemetry` | Recovered aggregates. |
+| `unrecoverable` | Fields the original evidence cannot support, each with the reason. Listed rather than computed. |
 
-- `run_id`, `trial_id`, `attempt_id`;
-- deployment key, provider, URL, region, model ID, model revision;
-- protocol, request settings, reasoning controls, cache/session controls;
-- profile ID/version, fixture ID/version/hash, engine version/code revision;
-- client host/network metadata and UTC timestamps.
-
-### Lifecycle
-
-- `planned`;
-- `started`;
-- `transport_completed`;
-- `protocol_completed`;
-- `cancelled`;
-- `skipped`.
-
-These fields may be independent state observations. Invariants such as `successful_trials <= started_trials <= planned_trials` are validated separately from HTTP attempts.
-
-### Outcomes
-
-- `success`;
-- `timeout`;
-- `rate_limited`;
-- `server_error`;
-- `client_error`;
-- `protocol_failure`;
-- `stream_interrupted`;
-- `context_rejected`;
-- `output_truncated`;
-- `budget_exceeded`;
-- `unknown`.
-
-A retry produces multiple HTTP attempts under one trial. Unexecuted, circuit-broken, interrupted, or malformed responses are not successes.
-
-### Timing and usage
-
-- request/response phase timestamps;
-- first byte/event, first generated token, first answer token;
-- end-to-end duration;
-- generated-token throughput and denominator;
-- requested target size, serialized size, provider-native input/output/reasoning/cache tokens;
-- estimated cost and pricing provenance;
-- provider-native usage and finish reason.
-
-Missing telemetry remains `null`/`unknown`. Nominal token counts are target values, never observed counts.
-
-### Evidence
-
-- sanitized request/response hashes;
-- raw response reference;
-- provider error identifiers and safe fields;
-- retry lineage;
-- configuration hashes;
-- engine output reference;
-- qualification classification and rule version.
+A reprocess never re-executes a request and never claims a field the original artifacts do not contain. An observation the original run never made — an absent client tokenization, an absent provider counter — is reported as unrecoverable instead of reconstructed.
 
 ## Compatibility policy
 
-Patch versions may clarify documentation without changing field semantics. Minor versions may add nullable fields or enums while preserving old readers' ability to reject unknown data safely. Major versions are required for semantic breaks and must include a migration note. Never overwrite an old raw artifact with a new normalized interpretation.
+Patch versions may clarify documentation without changing field semantics. Minor versions may add nullable fields or enums while preserving old readers' ability to reject unknown data safely. Major versions are required for semantic breaks and must include a migration note. Never overwrite an old raw artifact with a new normalized interpretation; a correction is a new artifact that names its source.
+
+
+## Roadmap
+
+The following are declared in methodology but not yet represented in the schema. They are listed here so an absence is visible rather than assumed implemented:
+
+- per-phase timestamps inside a request (first byte, first event, first answer token);
+- retry lineage for clients that retry, which the harness does not do today;
+- request and response body hashes for sanitized evidence;
+- provider error identifiers beyond the type and message;
+- qualification classification with a rule version.
+
+Missing telemetry remains `null` or `unknown`. Nominal token counts are target values, never observed counts.
+
+### Integrity follow-up (software 0.1.2)
+
+Malformed SSE data makes a trial a protocol failure even if a later frame contains a natural finish reason. Validation requires a success to have witnessed 2xx status and consistent natural finish reason/class; independent probes populate the same fields.
+
+Each metric validity entry now includes `statistic_scope`, `completion_mean_usable`, and `workload_claims_supported`. A censored request duration has state `censored`, scope `time_to_termination`, `percentiles_usable: false`, and `completion_mean_usable: false`, regardless of sample count. Its retained numeric summaries describe termination, not natural completion. TTFT is unaffected by the output ceiling.
+
+Provider-derived token counts and throughput remain observations of the delivered workload even when target sizing fails; `workload_claims_supported: false` prevents treating them as requested-size evidence. Client-tokenized throughput still requires independent client/provider agreement. These are additive fields in the unreleased 0.2.0 contract.

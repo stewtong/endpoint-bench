@@ -47,6 +47,8 @@ def _success_trial(index: int = 0, accounting: TokenAccounting | None = None) ->
         trial.observe(state)
     trial.attempts.append(HttpAttempt(1, http_status=200))
     trial.outcome = OutcomeState.SUCCESS
+    trial.finish_reason = "stop"
+    trial.finish_class = "natural"
     trial.duration_ms = 1.0
     if accounting is not None:
         trial.token_accounting = accounting
@@ -324,7 +326,11 @@ def test_report_carries_provenance_and_token_accounting(tmp_path: Path) -> None:
 
     assert report["provenance"]["workload_type"] == WORKLOAD_SYNTHETIC_SINGLE_TURN
     assert report["token_accounting"]["claims_supported"] is False
-    assert any("token counts disagree" in limit for limit in report["limitations"])
+    # The limitation must name the check that failed, not a generic message.
+    assert any("authoritative check" in limit for limit in report["limitations"])
+    # Both comparisons are published even when only one governs the verdict.
+    assert report["token_accounting"]["client_vs_provider"]["failed"] == 1
+    assert report["token_accounting"]["provider_vs_target"]["failed"] == 1
 
 
 # Metric-specific validity: one problem must not erase unrelated evidence.

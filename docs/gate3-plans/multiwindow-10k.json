@@ -1,0 +1,227 @@
+{
+  "schema_version": "1.0",
+  "experiment": "multiwindow-10k-c1-c2",
+  "status": "prepared_not_executed",
+  "datestamp": "2026-11-01",
+  "authorization": {
+    "execution_authorized": false,
+    "requires": [
+      "--authorize-live",
+      "NEBIUS_API_KEY present",
+      "verified pricing",
+      "per-cell --max-usd"
+    ],
+    "note": "Prepared only. No paid request has been sent for this experiment."
+  },
+  "design": {
+    "windows": 6,
+    "cells_per_window": 2,
+    "requests_per_cell": 20,
+    "total_trials": 240,
+    "total_http_attempts": 240,
+    "interleaving": "Both concurrency levels run back to back inside each window, so drift within a window affects both. Odd windows run C=1 first, even windows run C=2 first, giving three windows starting at each level. The order is fixed and recorded rather than re-randomized: with two cells per window a shuffle would only obscure an order that can be stated outright.",
+    "client_profile": "baseline-normal-client-server-accounting",
+    "client_settings": {
+      "session_affinity": false,
+      "automatic_retries": false,
+      "connection_reuse": "pooled",
+      "token_accounting": "provider_usage",
+      "random_seed": 42
+    },
+    "output_ceiling_rationale": "1024 is an untested pilot ceiling. Only 3 of 120 screening trials finished naturally; those selected observations cannot identify the uncensored completion-length distribution. The pilot must establish whether this ceiling avoids censoring before the remaining windows run.",
+    "estimated_wall_time_minutes": 60,
+    "wall_time_basis": "Six window start offsets spaced ten minutes apart, plus up to ten minutes for the final pair. Planning estimate only. If a pair overruns the next offset, stop and revise the schedule rather than overlap windows.",
+    "window_start_offsets_minutes": [
+      0,
+      10,
+      20,
+      30,
+      40,
+      50
+    ],
+    "temporal_scope": "Within-hour repeatability and order effects only; no hours/days reliability claim."
+  },
+  "pricing_basis": {
+    "source": "https://tokenfactory.nebius.com/models (rendered catalog)",
+    "effective_date": "2026-11-01",
+    "prompt_per_million_tokens": 0.3,
+    "completion_per_million_tokens": 1.2,
+    "verified": true,
+    "safety_multiplier": 1.5
+  },
+  "cost": {
+    "per_cell_estimate_usd": 0.129024,
+    "total_estimate_usd": 1.548288,
+    "nominal_input_tokens": 2457600,
+    "nominal_output_tokens": 245760,
+    "note": "Client-side conservative bound on nominal exposure. Not a provider billing limit and not a prediction of actual spend."
+  },
+  "qualification_contract": "docs/qualification/10k-slo-contract.json",
+  "runs": [
+    {
+      "run_index": 1,
+      "window": 1,
+      "position_in_window": 1,
+      "profile": "qualification-10k",
+      "concurrency": 1,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 2,
+      "window": 1,
+      "position_in_window": 2,
+      "profile": "qualification-10k",
+      "concurrency": 2,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 3,
+      "window": 2,
+      "position_in_window": 1,
+      "profile": "qualification-10k",
+      "concurrency": 2,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 4,
+      "window": 2,
+      "position_in_window": 2,
+      "profile": "qualification-10k",
+      "concurrency": 1,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 5,
+      "window": 3,
+      "position_in_window": 1,
+      "profile": "qualification-10k",
+      "concurrency": 1,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 6,
+      "window": 3,
+      "position_in_window": 2,
+      "profile": "qualification-10k",
+      "concurrency": 2,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 7,
+      "window": 4,
+      "position_in_window": 1,
+      "profile": "qualification-10k",
+      "concurrency": 2,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 8,
+      "window": 4,
+      "position_in_window": 2,
+      "profile": "qualification-10k",
+      "concurrency": 1,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 9,
+      "window": 5,
+      "position_in_window": 1,
+      "profile": "qualification-10k",
+      "concurrency": 1,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 10,
+      "window": 5,
+      "position_in_window": 2,
+      "profile": "qualification-10k",
+      "concurrency": 2,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 11,
+      "window": 6,
+      "position_in_window": 1,
+      "profile": "qualification-10k",
+      "concurrency": 2,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    },
+    {
+      "run_index": 12,
+      "window": 6,
+      "position_in_window": 2,
+      "profile": "qualification-10k",
+      "concurrency": 1,
+      "planned_requests": 20,
+      "planned_input_tokens": 204800,
+      "planned_output_token_ceiling": 20480,
+      "max_usd_ceiling": 0.15,
+      "max_requests": 20,
+      "estimated_cost_usd": 0.129024
+    }
+  ],
+  "doc_version": "1.1",
+  "purpose": "exploratory_repeat_measurement_not_qualification",
+  "pilot_gate": {
+    "window": 1,
+    "max_trials": 40,
+    "continue_only_if": "Both pilot cells have zero ceiling truncations, exact request accounting, valid raw evidence/schema, and verified provider-versus-target conformance. Publish endpoint failures as outcomes; do not retry or hide them.",
+    "on_failure": "Stop before window 2; preserve all pilot artifacts. Review censoring, errors, budget and schedule, then version the plan and obtain authorization for any revised paid experiment. No automatic output-cap escalation or replacement trials."
+  },
+  "qualification_note": "This exploratory plan cannot qualify an endpoint. A future qualification experiment needs ratified thresholds, a frozen contract and designated qualification windows disjoint from calibration/pilot data. Provider accounting supports delivered-workload observations, not tokenizer equivalence."
+}

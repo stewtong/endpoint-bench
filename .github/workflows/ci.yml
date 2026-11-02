@@ -110,6 +110,10 @@ jobs:
           assert all("session_id" in row and "input_length" in row for row in rows)
           assert len({row["session_id"] for row in rows}) == 4
           '
+      - name: Validate the prepared experiment plan and qualification contract
+        run: uv run python scripts/check_plan_contract.py
+      - name: Validate artifact reprocessing without modifying source evidence
+        run: uv run python scripts/check_reprocess.py
 
   engine-integration:
     # Opt-in: installs the pinned AIPerf engine (~96 distributions) and runs the
