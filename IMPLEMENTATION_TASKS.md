@@ -223,9 +223,10 @@ Dollar/request values are syntax examples, not spending authorization. Reject `-
 - [x] Add offline tests, GitHub Actions CI, pinned actions, locked dependencies, and least-privilege workflow permissions.
 - [x] Obtain owner license approval and add the MIT `LICENSE`.
 - [x] Verify the offline workflow in an isolated local checkout; macOS compatibility is verified only for that local environment.
-- [ ] Complete Linux clean-clone verification and observe a passing GitHub Actions run after the owner authorizes a push.
+- [x] Complete Linux clean-clone verification and observe a passing GitHub Actions run. Verified 2026-11-02: all four CI jobs passed on ubuntu-latest, including the opt-in engine-integration job that installs AIPerf 0.13.0.
 - [x] Validate normalized trial artifacts: lifecycle/outcome invariants, counter nesting, and per-record schema versioning are enforced before any trial is counted.
 - [ ] Commit a synthetic report example alongside the existing synthetic dry-run manifest.
+- [x] Repository published publicly with Dependabot alerts, Dependabot security updates, secret scanning, and push protection enabled.
 
 The pre-alpha source milestone is ready for release review after license approval and CI verification; live inference is not required for it.
 
