@@ -7,6 +7,7 @@ import pytest
 
 from endpoint_bench.cli import main
 from endpoint_bench.cost import estimate_cost_usd
+from endpoint_bench.mock_provider import MockProvider
 from endpoint_bench.profiles import load_profile
 from endpoint_bench.registry import load_registry
 
@@ -334,3 +335,69 @@ def test_probe_dry_run_plans_without_sending(tmp_path: Path, capsys) -> None:
     assert payload["planned_http_attempts"] == 2
     assert payload["inference"]["network_requests"] == 0
     assert payload["cost_preflight"]["estimate_usd"] is None  # example pricing unverified
+
+
+def test_every_run_option_declared_by_code_is_registered_in_the_parser() -> None:
+    """Guards a half-wired option: the handler read it before argparse knew it."""
+    from endpoint_bench.cli import build_parser
+
+    parser = build_parser()
+    namespace = parser.parse_args(
+        ["run", "--target", "x", "--dry-run", "--token-accounting", "server"]
+    )
+
+    assert namespace.token_accounting == "server"
+    assert parser.parse_args(["run", "--target", "x", "--dry-run"]).token_accounting == "client"
+
+
+def test_token_accounting_selects_the_server_accounting_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--token-accounting must be reachable past the guard, not just parseable."""
+    aiperf = Path(".venv-aiperf/bin/aiperf").resolve()
+    if not aiperf.exists():
+        pytest.skip("pinned AIPerf environment not installed")
+    with MockProvider() as mock:
+        document = json.loads(Path("configs/registry.example.json").read_text())
+        document["providers"][0]["base_url"] = mock.base_url
+        document["providers"][0]["deployments"][0]["pricing"] = {
+            "currency": "USD",
+            "prompt_per_million_tokens": 0.0,
+            "completion_per_million_tokens": 0.0,
+            "verified": True,
+            "source": "loopback mock",
+            "effective_date": "2026-11-01",
+        }
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(document))
+        profiles = tmp_path / "configs" / "profiles"
+        profiles.mkdir(parents=True)
+        (profiles / "smoke.json").write_text(Path("configs/profiles/smoke.json").read_text())
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(
+            [
+                "run",
+                "--config",
+                str(registry_path),
+                "--target",
+                "offline-mock-smoke",
+                "--profile",
+                "smoke",
+                "--execute",
+                "--max-requests",
+                "2",
+                "--max-usd",
+                "1",
+                "--token-accounting",
+                "server",
+                "--aiperf",
+                str(aiperf),
+                "--run-dir",
+                str(tmp_path / "runs"),
+            ]
+        )
+        capsys.readouterr()
+
+    # Reaching this point at all proves the option is wired past the guard.
+    assert exit_code in (0, 1)

@@ -127,6 +127,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--trace-type", default="mooncake-trace")
     run_parser.add_argument(
+        "--token-accounting",
+        choices=("client", "server"),
+        default="client",
+        help=(
+            "count tokens with the built-in tokenizer (client) or from provider "
+            "usage (server); server makes the throughput denominator "
+            "authoritative but stops verifying delivered target size"
+        ),
+    )
+    run_parser.add_argument(
         "--concurrency",
         type=int,
         default=None,
