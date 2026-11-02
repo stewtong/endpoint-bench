@@ -2,7 +2,7 @@
 
 **Version:** 0.5.1
 **Datestamp:** 2026-11-01  
-**Source:** `AGENTS.md` and canonical `BENCHMARK_PLAN.md` v0.5.0.
+**Source:** `AGENTS.md` and canonical `BENCHMARK_PLAN.md` v0.5.1.
 **Status:** Approved execution checklist; not evidence of completed benchmark runs.  
 **Update rule:** Keep gate deliverables, prerequisites, exits, and safety rules aligned with the canonical plan. Preserve historical evidence separately.
 
@@ -212,20 +212,23 @@ Dollar/request values are syntax examples, not spending authorization. Reject `-
 
 ## Gate 6 — Public-readiness and engineering quality
 
-**Status:** Pre-alpha source foundation delivered on this branch; release and benchmark MVP remain distinct.
+**Status (2026-11-01):** Pre-alpha source foundation delivered. Gate 6 items below are re-verified against current behavior; release and benchmark MVP remain distinct.
 
 - [x] Add a Python 3.13 package, CLI entry point, registry validation, and network-free dry-run manifest.
-- [x] Add fail-closed behavior for missing run mode and unimplemented `--execute`.
+- [x] Fail closed on a missing run mode. `--execute` is now implemented and still fails closed: request ceilings are mandatory, and non-loopback targets require explicit authorization, verified pricing, and a cost ceiling the conservative estimate must fit under.
 - [x] Add accurate README, methodology, result contract, development guide, contribution guide, security policy, changelog, and synthetic example.
 - [x] Add offline tests, GitHub Actions CI, pinned actions, locked dependencies, and least-privilege workflow permissions.
 - [x] Obtain owner license approval and add the MIT `LICENSE`.
 - [x] Verify the offline workflow in an isolated local checkout; macOS compatibility is verified only for that local environment.
 - [ ] Complete Linux clean-clone verification and observe a passing GitHub Actions run after the owner authorizes a push.
-- [ ] Implement a synthetic report example and schema validation for normalized trial artifacts.
+- [x] Validate normalized trial artifacts: lifecycle/outcome invariants, counter nesting, and per-record schema versioning are enforced before any trial is counted.
+- [ ] Commit a synthetic report example alongside the existing synthetic dry-run manifest.
 
-The pre-alpha source milestone is ready for release review after license approval and CI verification; live inference is not required for it. The benchmark MVP remains gated on AIPerf integration, conformance probes, normalized live evidence, reports, and at least one authorized live experiment. Expanded cache, long-context, reliability, and AA work remains a later milestone.
+The pre-alpha source milestone is ready for release review after license approval and CI verification; live inference is not required for it.
 
-**Exit:** A fresh outsider can install, run the offline example, inspect the manifest, and understand that no benchmark evidence exists. A pre-alpha release additionally requires approved licensing and verified CI. A benchmark MVP additionally requires the Gate 2/3 live evidence listed above.
+The benchmark MVP's implementation criteria are now met offline: AIPerf integration, streaming and tool-call conformance probes, normalized evidence, reports, and one authorized live experiment all exist. What remains is not implementation but evidence at scale: repeatable profiles exercised with enough samples and temporal coverage to support a qualification verdict. Expanded cache, long-context, reliability, and AA work remains a later milestone.
+
+**Exit:** A fresh outsider can install, run the offline example, inspect the manifest, and understand that no endpoint has been qualified. One authorized 2-request smoke run is labelled as screening evidence only. A pre-alpha release additionally requires approved licensing and verified CI. A benchmark MVP additionally requires the Gate 2/3 live evidence listed above.
 
 ## Useful references
 

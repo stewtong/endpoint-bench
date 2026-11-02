@@ -12,13 +12,12 @@ This project focuses on those operational properties. It treats broad model qual
 
 ## Relationship to other projects
 
-- **AIPerf** is planned as the primary performance/load/trace-replay engine.
-- **Artificial Analysis (AA)** is a planned, separately stored external reference for model capability and intelligence data.
-- Agent Endpoint Bench plans to add provider configuration, workload profiles, protocol conformance checks, operational qualification, reproducible evidence, and comparative reporting.
+- **AIPerf 0.13.0** is the pinned performance, load, and trace-replay engine. It is driven as a subprocess and is not a project dependency.
+- **Artificial Analysis (AA)** is a separately stored external reference for model capability data. AA import is not implemented.
 
-The current implementation is an early, offline-only foundation. It does not yet perform live benchmarking, AIPerf orchestration, tool-call probing, cache measurement, long-context testing, or AA synchronization.
+The implementation covers provider configuration, workload profiles, AIPerf orchestration, protocol conformance probes, normalized evidence, and comparative reporting. Cache measurement, long-context qualification, and AA synchronization remain unimplemented.
 
-**Project version:** software `0.0.1` (pre-alpha); specification/methodology `0.5.0`; result schema `0.1.0`; profile schema `1.0`; AIPerf target `0.13.0` (not yet integrated).
+**Project version:** software `0.0.1` (pre-alpha); specification/methodology `0.5.1`; result schema `0.1.0`; profile schema `1.0`; pinned engine AIPerf `0.13.0`.
 
 ## Current status
 
@@ -42,7 +41,9 @@ The current implementation is an early, offline-only foundation. It does not yet
 | AA metadata import | Planned |
 | Live paid endpoint execution | Implemented; one authorized 2-request smoke run completed |
 
-There are no benchmark results yet. A single 2-request authorized smoke run exists as screening evidence only; it is not a qualification verdict. Do not interpret generated manifests, probe evidence, or reports as measured endpoint performance. AIPerf integration has been verified only against a local mock, never a live provider.
+There are no benchmark results yet. One authorized 2-request smoke run against a single deployment exists as screening evidence only; it is not a qualification verdict and supports no capacity, reliability, cache, or long-context claim. Offline evidence comes from a local mock. Do not interpret generated manifests, probe evidence, or reports as endpoint qualification.
+
+No endpoint has been qualified, failed, or measured to a standard profile. Qualification is a later gate.
 
 ## Quickstart
 
@@ -64,7 +65,7 @@ This requires Python 3.13. `uv sync` creates an isolated environment; it does no
 
 The dry-run manifest records the resolved target, profile, configuration hashes, planned request/token exposure, and explicit evidence that no request was sent. Cost estimation is intentionally `null` in the example because its synthetic pricing is unverified.
 
-Unknown pricing is allowed for registry validation and dry-run; it is represented as `null`, never as zero. `--execute` fails closed without request ceilings, and it refuses non-loopback targets unless `--authorize-live` is given with verified pricing and a cost ceiling. No paid inference has been run.
+Unknown pricing is allowed for registry validation and dry-run; it is represented as `null`, never as zero. `--execute` fails closed: it requires `--max-requests` within the profile's plan, and for non-loopback targets it additionally requires `--authorize-live`, verified per-million pricing, and a `--max-usd` ceiling that the computed conservative estimate must fit under. One authorized smoke run has been executed; see [`IMPLEMENTATION_TASKS.md`](IMPLEMENTATION_TASKS.md) for its evidence and limitations.
 
 ## Offline conformance evidence
 
@@ -87,10 +88,12 @@ Full AIPerf integration requires the pinned engine environment, which is not par
 ```bash
 uv venv .venv-aiperf --python 3.13
 VIRTUAL_ENV=.venv-aiperf uv pip install aiperf==0.13.0
-uv run endpoint-bench run --target offline-mock-smoke --profile smoke \
+uv run endpoint-bench run --target <deployment_key> --profile smoke \
   --execute --max-requests 2
 uv run endpoint-bench report --run runs/<run_id>
 ```
+
+Against the checked-in example target this exits non-zero and records a **benchmark failure**, because that mock URL is deliberately unreachable. That is the intended demonstration of failure handling: the run still writes normalized trials, raw evidence, and a report, and it does not report zeros as measurements. A passing AIPerf run requires a reachable target.
 
 The complete multi-turn tool-call exchange is exercised with:
 
@@ -98,6 +101,8 @@ The complete multi-turn tool-call exchange is exercised with:
 uv run endpoint-bench probe --target <deployment_key> --profile smoke \
   --scenario tool-round-trip --requests 1
 ```
+
+One logical trial, two HTTP attempts: the tool call plus the continuation. The passing matrix — fragmented argument reassembly, multiple calls, missing and inconsistent call ids, invalid JSON, interrupted streams, absent tool calls attributed to the model, large observations, and malformed or timed-out continuations — runs offline in `tests/test_tool_conformance.py`. Against the checked-in example target the probe records a `client_error`, because that URL is deliberately unreachable.
 
 AIPerf 0.13.0 sends `X-Session-Affinity` by default, which can improve cache locality and make an endpoint look faster than it would for an ordinary client. Baseline runs disable it and verify its absence at the receiving server; affinity experiments are separate result identities. See [`docs/decisions/0002-architecture-and-aiperf-verification.md`](docs/decisions/0002-architecture-and-aiperf-verification.md).
 
@@ -109,15 +114,15 @@ Supply credentials only through the environment variable named in the registry. 
 
 ## Benchmark profiles
 
-Planned profile families are described in [`BENCHMARK_PLAN.md`](BENCHMARK_PLAN.md) and [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md):
+Five profile families ship in [`configs/profiles/`](configs/profiles). Each declares request count, target input size, output ceiling, concurrency, an explicit timeout, and a token-sizing tolerance:
 
-- **Smoke:** protocol and configuration compatibility.
-- **Quick:** low-cost screening.
-- **Standard:** repeated performance and concurrency observations.
-- **Long context:** accepted-versus-demonstrated context, up to a safe and explicitly authorized maximum.
-- **Reliability:** multi-window stability and failure accounting.
+- **Smoke:** protocol and configuration compatibility, 2 requests.
+- **Quick:** low-cost screening, 20 requests.
+- **Standard:** repeated performance and concurrency observations, 200 requests.
+- **Long context:** accepted-versus-demonstrated context, requiring explicit authorization.
+- **Reliability:** multi-window stability and failure accounting, 300 requests.
 
-Low-cost screening is not endpoint qualification. Qualification requires sufficient samples, temporal coverage, and profile-specific thresholds.
+Thresholds are marked provisional and uncalibrated. Low-cost screening is not endpoint qualification, which requires sufficient samples, temporal coverage, and profile-specific thresholds.
 
 ## Interpreting results
 
@@ -130,8 +135,9 @@ Never compare endpoints across undisclosed model revisions, client settings, tra
 
 ## Limitations
 
-- No public endpoint has been measured by this repository.
-- AIPerf, conformance probes, caching, long context, and AA import are not implemented.
+- No endpoint has been qualified. One 2-request live smoke run is screening evidence only.
+- Cache measurement, long-context qualification, trace replay, and AA import are not implemented.
+- The built-in tokenizer does not match every hosted model. On the single live run it undercounted prompt tokens by 25-29% against provider-reported usage, which withholds token-normalized claims.
 - Public shared capacity and provider revisions can change independently of model identity.
 - API telemetry, token accounting, cache state, and context behavior vary by provider.
 - Large-context behavior cannot be inferred safely from an HTTP 200 response.

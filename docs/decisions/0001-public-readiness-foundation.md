@@ -2,6 +2,8 @@
 
 **Date:** 2026-11-01 — **Status:** Accepted for v0.5.0 specification.
 
+> **Partially superseded 2026-11-01.** Items 4 and 5 of the decision below described `--execute` as failing closed because live execution was unimplemented. Live execution is now implemented and still fail-closed, for the reasons recorded in [`0002-architecture-and-aiperf-verification.md`](0002-architecture-and-aiperf-verification.md). The original text is preserved as the historical record of this decision.
+
 ## Decision
 
 Implement the smallest credible public foundation before adding benchmark traffic:

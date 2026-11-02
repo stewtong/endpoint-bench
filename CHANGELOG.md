@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes are documented here. This project distinguishes the software package version, benchmark specification/methodology version, result schema version, profile schema version, and external AIPerf engine version. Current values are software `0.0.1`, specification `0.5.0`, result schema `0.1.0`, profile schema `1.0`, and AIPerf target `0.13.0`.
+All notable changes are documented here. This project distinguishes the software package version, benchmark specification/methodology version, result schema version, profile schema version, and external AIPerf engine version. Current values are software `0.0.1`, specification `0.5.1`, result schema `0.1.0`, profile schema `1.0`, and pinned engine AIPerf `0.13.0`.
 
 ## [Unreleased]
 

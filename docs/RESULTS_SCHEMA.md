@@ -32,7 +32,7 @@ Implemented fields:
 | `source_hashes` | object | SHA-256 of registry and profile source files. |
 | `limitations` | array | Explicit interpretation restrictions. |
 
-`planned_exposure.estimated_cost` is `null` when pricing is unverified or cost estimation is not implemented; `estimated_cost_reason` explains which state applies. Unknown pricing is valid for registry validation and dry-run, but unbounded/unverifiable pricing must fail closed before unattended live execution.
+`planned_exposure.estimated_cost` is a conservative upper bound computed from verified per-million rates with a 1.5x safety multiplier, or `null` when pricing is unverified or rates are missing. `estimated_cost_reason` is `conservative_upper_bound` or `not_estimated_pricing_unverified`. Unknown pricing is valid for registry validation and dry-run, but it fails closed before unattended non-loopback execution. A client-side estimate is a bound, not a provider billing limit.
 
 A dry-run manifest is not benchmark evidence, a trial result, or a capability claim.
 

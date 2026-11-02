@@ -4,6 +4,7 @@ import hashlib
 from datetime import UTC, datetime
 
 from . import RESULT_SCHEMA_VERSION, __version__
+from .cost import estimate_cost_usd
 from .profiles import Profile
 from .registry import Deployment, Registry
 
@@ -21,6 +22,7 @@ def build_dry_run_manifest(registry: Registry, deployment: Deployment, profile: 
     generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     pricing = deployment.pricing
     pricing_verified = pricing.get("verified") is True
+    estimate = estimate_cost_usd(deployment, profile)
 
     return {
         "schema_version": RESULT_SCHEMA_VERSION,
@@ -63,11 +65,11 @@ def build_dry_run_manifest(registry: Registry, deployment: Deployment, profile: 
             "max_generated_tokens": max_requests * profile.max_output_tokens,
             "max_total_tokens": max_tokens,
             "max_concurrency": profile.concurrency,
-            "estimated_cost": None,
+            "estimated_cost": estimate,
             "estimated_cost_reason": (
-                "not_estimated"
-                if not pricing_verified
-                else "cost_estimation_not_implemented"
+                "conservative_upper_bound"
+                if estimate is not None
+                else "not_estimated_pricing_unverified"
             ),
         },
         "source_hashes": {

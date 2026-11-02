@@ -15,7 +15,7 @@
     "provider_name": "offline-mock",
     "region": "local-synthetic"
   },
-  "generated_at": "2026-11-01T22:58:56.753660Z",
+  "generated_at": "2026-11-02T03:41:09.921449Z",
   "inference": {
     "credentials_sent": false,
     "executed": false,
@@ -29,7 +29,7 @@
   "manifest_type": "dry_run",
   "planned_exposure": {
     "estimated_cost": null,
-    "estimated_cost_reason": "not_estimated",
+    "estimated_cost_reason": "not_estimated_pricing_unverified",
     "max_concurrency": 1,
     "max_generated_tokens": 64,
     "max_input_tokens": 256,

@@ -1,8 +1,8 @@
 # Agent Endpoint Bench — Endpoint Readiness and Performance Plan
 
-**Version:** 0.5.0
+**Version:** 0.5.1
 **Datestamp:** 2026-11-01  
-**Status:** Approved v0.5 specification; not evidence of completed benchmark runs. The current software is v0.0.1 and implements only offline registry validation and dry-run manifests.
+**Status:** Approved v0.5 specification; not evidence of completed benchmark runs. The current software is v0.0.1 pre-alpha and implements offline registry validation, dry-run manifests, normalized trial evidence, deterministic conformance probes, and a pinned AIPerf 0.13.0 wrapper. One authorized 2-request live smoke run exists as screening evidence only; no endpoint is qualified.
 **Source:** `AGENTS.md`, historical Token Factory/OpenClaw evidence, repository inspection, AIPerf 0.13.0, AA documentation, and the v0.5 public-readiness audit.
 **Update rule:** Keep this canonical. Re-verify AIPerf, AA, endpoints, revisions, limits, pricing, reasoning, and cache behavior before execution. Preserve history separately.
 
