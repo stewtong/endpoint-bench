@@ -116,6 +116,9 @@ What this does **not** establish: capacity, concurrency behaviour, cache behavio
 
 ## Gate 3 — Standard performance profiles
 
+**Status (2026-11-01): preparation only; Gate 3 is not entered.** See [`docs/GATE3_PREPARATION.md`](docs/GATE3_PREPARATION.md). Delivered toward this gate: metric-specific validity states so token-sizing failures no longer erase latency evidence; a reproducible local-mock benchmark with agent-shaped Mooncake trace replay and a normalized report; three screening profiles at 1K/10K/32K with a concurrency override; exact dry-run manifests and conservative cost estimates for six screening runs and one live tool-call continuation test. No screening profile has been executed against a live endpoint.
+
+
 **Prerequisites:** Gate 2 offline exit; explicit user authorization for any live execution.
 
 **Deliverables**

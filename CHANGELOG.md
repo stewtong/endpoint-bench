@@ -14,7 +14,13 @@ All notable changes are documented here. This project distinguishes the software
 - Numeric-loopback-only execution guard rejecting hostnames, credential-bearing URLs, missing ports, non-allowlisted addresses, IPv4-mapped addresses, and ambiguous numeric forms.
 - Proxy-variable stripping and redirect refusal for local execution.
 - SIGTERM-then-SIGKILL process-group termination with orphan-worker detection and separate classification of timeout, cancellation, benchmark failure, and harness failure.
-- `probe --scenario tool-round-trip` workflow.
+- `probe --scenario tool-round-trip` workflow, plus `probe --dry-run` planning with cost preflight.
+- `endpoint-bench mock` command to serve the local provider on an explicit loopback port.
+- Agent-shaped Mooncake trace replay: `run --trace-file` / `--trace-type`, with the workload labelled `recorded_multi_turn_replay`.
+- Metric-specific validity states (`valid`, `valid_mean_only`, `invalid_token_sizing`, `invalid_client_tokenization`, `not_observed`) so one measurement problem does not invalidate unrelated evidence.
+- `--concurrency` override on `run`, validated against the profile's request count.
+- `screening-1k`, `screening-10k`, `screening-32k` profiles.
+- Expanded CI: separate lint, test, and offline-workflow jobs plus an opt-in engine-integration job that installs the pinned AIPerf release.
 - Cost preflight that computes a conservative upper-bound estimate from verified per-million rates and refuses execution when the estimate exceeds `--max-usd` or when rates are missing.
 - HTTP status joined from raw evidence by request id, so attempt records carry the observed status.
 - OpenAI-style `/v1` base URLs are normalised for AIPerf, which appends the endpoint path itself.

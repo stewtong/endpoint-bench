@@ -72,6 +72,111 @@ def _metric_snapshot(summary: dict[str, Any] | None) -> dict[str, Any]:
     return snapshot
 
 
+#: Metrics whose denominator or numerator is a token count. They are only
+#: meaningful when workload token sizing has been verified against the provider.
+TOKEN_NORMALIZED_METRICS = frozenset(
+    {
+        "output_token_throughput",
+        "input_token_throughput",
+        "total_token_throughput",
+        "prefill_throughput_per_user",
+        "e2e_output_token_throughput",
+        "effective_decode_throughput",
+        "effective_prefill_throughput",
+        "effective_total_throughput",
+        "effective_decode_throughput_per_user",
+        "effective_prefill_throughput_per_user",
+        "active_decode_throughput",
+        "active_prefill_throughput",
+        "active_decode_throughput_per_user",
+        "active_prefill_throughput_per_user",
+        "active_total_throughput",
+    }
+)
+
+#: Metrics produced by client-side tokenization. They measure the tokenizer, not
+#: the endpoint, whenever the tokenizer does not match the served model.
+CLIENT_TOKENIZED_METRICS = frozenset(
+    {
+        "input_sequence_length",
+        "output_sequence_length",
+        "output_token_count",
+        "total_isl",
+        "total_osl",
+        "usage_prompt_tokens_diff_pct",
+        "usage_completion_tokens_diff_pct",
+    }
+)
+
+#: Below this sample count, percentile claims are not supported.
+PERCENTILE_MIN_SAMPLES = 30
+
+VALIDITY_STATES = (
+    "valid",
+    "valid_mean_only",
+    "invalid_token_sizing",
+    "invalid_client_tokenization",
+    "not_observed",
+)
+
+
+def assess_metric_validity(
+    *,
+    metrics: dict[str, Any],
+    sizing: dict[str, Any],
+    successful_trials: int,
+) -> dict[str, dict[str, Any]]:
+    """Classify each metric's usability independently.
+
+    A token-count problem must not invalidate latency evidence, and a latency
+    problem must not invalidate provider-reported usage. Each metric states its
+    own state and reason so a reader can use what is sound and ignore what is not.
+    """
+    sizing_ok = bool(sizing.get("claims_supported"))
+    validity: dict[str, dict[str, Any]] = {}
+
+    for name, entry in sorted(metrics.items()):
+        if not isinstance(entry, dict):
+            continue
+
+        if name in TOKEN_NORMALIZED_METRICS:
+            if sizing_ok:
+                state, reason = "valid", "workload token sizing verified within tolerance"
+            else:
+                state, reason = (
+                    "invalid_token_sizing",
+                    "token counts disagree with provider usage; the denominator is unreliable",
+                )
+        elif name in CLIENT_TOKENIZED_METRICS:
+            if sizing_ok:
+                state, reason = "valid", "client tokenization agrees with provider usage"
+            else:
+                state, reason = (
+                    "invalid_client_tokenization",
+                    "client tokenizer does not match the served model",
+                )
+        elif successful_trials == 0:
+            state, reason = "not_observed", "no successful trial produced this metric"
+        else:
+            state, reason = "valid", "measured directly from response timing"
+
+        count = entry.get("count")
+        if state == "valid" and isinstance(count, int) and count < PERCENTILE_MIN_SAMPLES:
+            state = "valid_mean_only"
+            reason = (
+                f"{count} sample(s) below the {PERCENTILE_MIN_SAMPLES}-sample minimum; "
+                "mean is usable, percentile claims are not"
+            )
+
+        validity[name] = {
+            "state": state,
+            "reason": reason,
+            "percentiles_usable": state == "valid",
+        }
+
+    return validity
+
+
 def _host_only(url: str) -> str:
     """Host and port only. Never a path, query, or embedded credential."""
     parts = urlsplit(url)
@@ -108,6 +213,7 @@ def build_provenance(
     artifact_dir: Path | None = None,
     process_deadline_s: float | None = None,
     max_usd_ceiling: float | None = None,
+    planned_requests: int | None = None,
 ) -> dict[str, Any]:
     """Record everything needed to interpret or reproduce this run.
 
@@ -117,7 +223,7 @@ def build_provenance(
     if workload_type not in WORKLOAD_KINDS:
         raise ReportError(f"unknown workload type `{workload_type}`")
 
-    planned = profile.request_count
+    planned = profile.request_count if planned_requests is None else planned_requests
     actual = results.counters.http_attempts
     tokens = token_sizing_summary(results.trials)
 
@@ -227,8 +333,8 @@ def build_report(
     if sizing["outside_tolerance"]:
         limitations.append(
             "Client-side and provider-reported input token counts disagree materially. "
-            "Token-normalized performance and long-context claims are not supported by "
-            "this run until the discrepancy is resolved."
+            "Token-normalized metrics are marked invalid for this run. Latency and other "
+            "directly observed timings remain usable and are marked valid individually."
         )
     elif sizing["unverifiable"] and not sizing["within_tolerance"]:
         limitations.append(
@@ -256,6 +362,11 @@ def build_report(
         "outcomes": outcome_summary(trials),
         "metrics": _metric_snapshot(results.summary),
         "token_accounting": token_sizing_summary(trials),
+        "metric_validity": assess_metric_validity(
+            metrics=_metric_snapshot(results.summary),
+            sizing=token_sizing_summary(trials),
+            successful_trials=results.counters.succeeded,
+        ),
         "provenance": provenance,
         "notes": list(results.notes),
         "limitations": limitations,

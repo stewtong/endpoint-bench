@@ -237,3 +237,100 @@ def test_generated_config_requests_raw_evidence(tmp_path: Path) -> None:
     )
 
     assert config["benchmark"]["artifacts"]["raw"] is True
+
+
+def test_concurrency_override_is_applied_and_echoed(tmp_path: Path) -> None:
+    (tmp_path / "configs" / "profiles").mkdir(parents=True)
+    for name in ("screening-1k",):
+        (tmp_path / "configs" / "profiles" / f"{name}.json").write_text(
+            Path(f"configs/profiles/{name}.json").read_text()
+        )
+    registry_path = Path("configs/registry.example.json").resolve()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    try:
+        import contextlib
+        import io
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            exit_code = main(
+                [
+                    "run",
+                    "--config",
+                    str(registry_path),
+                    "--target",
+                    "offline-mock-smoke",
+                    "--profile",
+                    "screening-1k",
+                    "--concurrency",
+                    "2",
+                    "--dry-run",
+                ]
+            )
+        payload = json.loads(buffer.getvalue())
+    finally:
+        monkeypatch.undo()
+
+    assert exit_code == 0
+    assert payload["profile"]["concurrency"] == 2
+    assert payload["planned_exposure"]["max_concurrency"] == 2
+
+
+def test_concurrency_override_above_request_count_is_rejected(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "run",
+            "--target",
+            "offline-mock-smoke",
+            "--profile",
+            "screening-1k",
+            "--concurrency",
+            "999",
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "exceeds the profile" in capsys.readouterr().err
+
+
+def test_probe_dry_run_plans_without_sending(tmp_path: Path, capsys) -> None:
+    profiles = tmp_path / "configs" / "profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "smoke.json").write_text(Path("configs/profiles/smoke.json").read_text())
+    document = json.loads(Path("configs/registry.example.json").read_text())
+    document["providers"][0]["base_url"] = "http://198.51.100.7:8000/v1"
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(json.dumps(document))
+    monkey = pytest.MonkeyPatch()
+    monkey.chdir(tmp_path)
+    try:
+        exit_code = main(
+            [
+                "probe",
+                "--config",
+                str(registry_path),
+                "--target",
+                "offline-mock-smoke",
+                "--profile",
+                "smoke",
+                "--scenario",
+                "tool-round-trip",
+                "--requests",
+                "1",
+                "--dry-run",
+            ]
+        )
+    finally:
+        monkey.undo()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["manifest_type"] == "probe_dry_run"
+    assert payload["planned_trials"] == 1
+    assert payload["planned_http_attempts"] == 2
+    assert payload["inference"]["network_requests"] == 0
+    assert payload["cost_preflight"]["estimate_usd"] is None  # example pricing unverified

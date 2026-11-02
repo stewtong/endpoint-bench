@@ -1,0 +1,60 @@
+{
+  "deployment": {
+    "base_url": "https://api.tokenfactory.nebius.com/v1",
+    "context": {
+      "advertised_input_tokens": 1048576,
+      "context_state": "advertised_only_unverified",
+      "effective_input_tokens": null
+    },
+    "credential_env_name": "NEBIUS_API_KEY",
+    "deployment_key": "tf-deepseek-v4.1-flash-1017",
+    "model_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "model_revision": null,
+    "pricing_verified": true,
+    "protocol": "openai-chat-completions",
+    "provider_name": "tokenfactory-nebius",
+    "region": "us-north1"
+  },
+  "generated_at": "2026-11-02T03:53:49.248996Z",
+  "inference": {
+    "credentials_sent": false,
+    "executed": false,
+    "network_requests": 0,
+    "reason": "dry_run_only"
+  },
+  "limitations": [
+    "This manifest is a dry-run and is not benchmark evidence.",
+    "No endpoint request was sent and no token was generated."
+  ],
+  "manifest_type": "dry_run",
+  "planned_exposure": {
+    "estimated_cost": 0.304128,
+    "estimated_cost_reason": "conservative_upper_bound",
+    "max_concurrency": 1,
+    "max_generated_tokens": 5120,
+    "max_input_tokens": 655360,
+    "max_requests": 20,
+    "max_total_tokens": 660480
+  },
+  "profile": {
+    "concurrency": 1,
+    "description": "Screening at 32k input tokens. Provisional only; not endpoint qualification.",
+    "input_tokens": 32768,
+    "max_output_tokens": 256,
+    "name": "screening-32k",
+    "request_count": 20,
+    "schema_version": "1.0",
+    "source_sha256": "18816109685096374febed6d2a63a507e5b99cf9841474ba5ee29073e1e1e2e0",
+    "streaming": true
+  },
+  "run_id": "dryrun-62a0c78f6547",
+  "schema_version": "0.1.0",
+  "software": {
+    "name": "endpoint-bench",
+    "version": "0.0.1"
+  },
+  "source_hashes": {
+    "profile_sha256": "18816109685096374febed6d2a63a507e5b99cf9841474ba5ee29073e1e1e2e0",
+    "registry_sha256": "10953b963156cc4c3ea2121cd5f8ca0fe79a6a9a84ab434d71cc90ad005b864b"
+  }
+}

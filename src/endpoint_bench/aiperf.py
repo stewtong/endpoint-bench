@@ -114,6 +114,8 @@ def build_benchmark_config(
     credential_env_name: str | None,
     streaming: bool = True,
     capture_raw: bool = False,
+    trace_file: Path | None = None,
+    trace_type: str = "mooncake-trace",
 ) -> dict[str, Any]:
     """Build an AIPerf YAML envelope as a plain mapping.
 
@@ -148,14 +150,7 @@ def build_benchmark_config(
             # expansion adds `datasets:` alongside the shorthand, and AIPerf
             # rejects the two together, so the shorthand is unsafe in any config
             # that may be swept.
-            "datasets": [
-                {
-                    "name": "main",
-                    "type": "synthetic",
-                    "entries": requests,
-                    "prompts": {"isl": input_tokens, "osl": output_tokens},
-                }
-            ],
+            "datasets": [_dataset_spec(requests, input_tokens, output_tokens, trace_file, trace_type)],
             "phases": {
                 "type": "concurrency",
                 "concurrency": concurrency,
@@ -171,6 +166,35 @@ def build_benchmark_config(
                 "auto_plot": False,
             },
         },
+    }
+
+
+def _dataset_spec(
+    requests: int,
+    input_tokens: int,
+    output_tokens: int,
+    trace_file: Path | None,
+    trace_type: str,
+) -> dict[str, Any]:
+    """Dataset block: synthetic prompts, or recorded trace replay.
+
+    Trace replay is not synthetic traffic and must never be described as live
+    agent execution. The workload label in the report records the distinction.
+    """
+    if trace_file is None:
+        return {
+            "name": "main",
+            "type": "synthetic",
+            "entries": requests,
+            "prompts": {"isl": input_tokens, "osl": output_tokens},
+        }
+    # AIPerf's dataset discriminator is `type: file`; the trace format lives in
+    # `format:` and uses an underscore enum value (`mooncake_trace`).
+    return {
+        "name": "main",
+        "type": "file",
+        "path": str(Path(trace_file).resolve()),
+        "format": trace_type.replace("-", "_"),
     }
 
 

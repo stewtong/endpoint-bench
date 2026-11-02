@@ -67,6 +67,28 @@ The dry-run manifest records the resolved target, profile, configuration hashes,
 
 Unknown pricing is allowed for registry validation and dry-run; it is represented as `null`, never as zero. `--execute` fails closed: it requires `--max-requests` within the profile's plan, and for non-loopback targets it additionally requires `--authorize-live`, verified per-million pricing, and a `--max-usd` ceiling that the computed conservative estimate must fit under. One authorized smoke run has been executed; see [`IMPLEMENTATION_TASKS.md`](IMPLEMENTATION_TASKS.md) for its evidence and limitations.
 
+## Run a full benchmark locally
+
+A complete AIPerf benchmark with agent-shaped trace replay needs no credentials and no network beyond loopback:
+
+```bash
+uv venv .venv-aiperf --python 3.13
+VIRTUAL_ENV=.venv-aiperf uv pip install aiperf==0.13.0
+
+# terminal 1: the mock provider
+uv run endpoint-bench mock --port 18080
+
+# terminal 2: replay a synthetic multi-turn agent trace
+uv run endpoint-bench run \
+  --config examples/local-benchmark/registry.json \
+  --target local-mock-agent-replay \
+  --trace-file examples/local-benchmark/agent-trace.jsonl \
+  --execute --max-requests 12
+uv run endpoint-bench report --run runs/<run_id>
+```
+
+The trace is synthetic and deterministic: four agent sessions, three turns each, growing context. The report labels the workload `recorded_multi_turn_replay` and states that replay is not live agent execution. See [`docs/GATE3_PREPARATION.md`](docs/GATE3_PREPARATION.md) for the verified result and for the prepared live experiments.
+
 ## Offline conformance evidence
 
 The probe path needs no credentials and no AIPerf installation. Its passing conformance matrix — streaming start, chunks, usage, finish reason, truncation, interruption, timeouts before and after first token, 429/5xx, malformed payloads, and missing usage — runs entirely against a local mock in the test suite:

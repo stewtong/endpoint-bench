@@ -583,3 +583,30 @@ def test_missing_raw_evidence_leaves_status_unknown(tmp_path: Path) -> None:
 
     # Unknown is None, never a fabricated 200.
     assert results.trials[0].attempts[0].http_status is None
+
+
+def test_trace_dataset_uses_file_type_and_underscore_format(tmp_path: Path) -> None:
+    """AIPerf's discriminator is `type: file`; the format is a separate enum."""
+    trace = tmp_path / "trace.jsonl"
+    trace.write_text('{"input_length": 10, "output_length": 4}\n')
+
+    config = build_benchmark_config(
+        model_id="mock-model",
+        base_url="http://127.0.0.1:18080",
+        client=BASELINE_CLIENT,
+        requests=1,
+        concurrency=1,
+        input_tokens=8,
+        output_tokens=4,
+        artifact_dir=tmp_path,
+        credential_env_name=None,
+        trace_file=trace,
+        trace_type="mooncake-trace",
+    )
+    dataset = config["benchmark"]["datasets"][0]
+
+    assert dataset["type"] == "file"
+    assert dataset["format"] == "mooncake_trace"
+    assert dataset["path"] == str(trace.resolve())
+    # A replay dataset must not carry synthetic prompt sizing.
+    assert "prompts" not in dataset

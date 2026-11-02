@@ -112,8 +112,12 @@ class MockProvider:
 
     # -- lifecycle ---------------------------------------------------------
 
-    def start(self) -> str:
-        """Start serving and return the base URL (without a trailing slash)."""
+    def start(self, port: int = 0) -> str:
+        """Start serving and return the base URL (without a trailing slash).
+
+        `port=0` binds an ephemeral port, which is what tests want. The CLI binds
+        an explicit port so a contributor can point the benchmark at it.
+        """
         provider = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -159,7 +163,7 @@ class MockProvider:
                 self.end_headers()
                 self.wfile.write(data)
 
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
         server.daemon_threads = True
         self._server = server
         self._thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -179,6 +183,18 @@ class MockProvider:
     def __enter__(self) -> MockProvider:
         self.base_url = self.start()
         return self
+
+    def serve_forever(self) -> None:
+        """Block, serving until interrupted. Used by the `mock` CLI command."""
+        if self._server is None:
+            raise RuntimeError("call start() before serve_forever()")
+        try:
+            while True:
+                time.sleep(0.2)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.stop()
 
     def __exit__(self, *exc: object) -> None:
         self.stop()

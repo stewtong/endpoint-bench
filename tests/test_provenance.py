@@ -325,3 +325,64 @@ def test_report_carries_provenance_and_token_accounting(tmp_path: Path) -> None:
     assert report["provenance"]["workload_type"] == WORKLOAD_SYNTHETIC_SINGLE_TURN
     assert report["token_accounting"]["claims_supported"] is False
     assert any("token counts disagree" in limit for limit in report["limitations"])
+
+
+# Metric-specific validity: one problem must not erase unrelated evidence.
+
+
+def test_latency_stays_valid_when_token_sizing_fails() -> None:
+    from endpoint_bench.report import assess_metric_validity
+
+    metrics = {
+        "time_to_first_token": {"unit": "ms", "avg": 500.0, "count": 40},
+        "request_latency": {"unit": "ms", "avg": 600.0, "count": 40},
+        "output_token_throughput": {"unit": "tokens/sec", "avg": 40.0, "count": 40},
+        "input_sequence_length": {"unit": "tokens", "avg": 128.0, "count": 40},
+        "usage_prompt_tokens": {"unit": "tokens", "avg": 160.0, "count": 40},
+    }
+    sizing = {"claims_supported": False}
+
+    validity = assess_metric_validity(metrics=metrics, sizing=sizing, successful_trials=40)
+
+    assert validity["time_to_first_token"]["state"] == "valid"
+    assert validity["request_latency"]["state"] == "valid"
+    assert validity["output_token_throughput"]["state"] == "invalid_token_sizing"
+    assert validity["input_sequence_length"]["state"] == "invalid_client_tokenization"
+    # Provider-reported usage is a direct observation, not a derived metric.
+    assert validity["usage_prompt_tokens"]["state"] == "valid"
+
+
+def test_token_normalized_metrics_become_valid_when_sizing_is_verified() -> None:
+    from endpoint_bench.report import assess_metric_validity
+
+    metrics = {"output_token_throughput": {"unit": "tokens/sec", "avg": 40.0, "count": 40}}
+
+    validity = assess_metric_validity(
+        metrics=metrics, sizing={"claims_supported": True}, successful_trials=40
+    )
+
+    assert validity["output_token_throughput"]["state"] == "valid"
+    assert validity["output_token_throughput"]["percentiles_usable"] is True
+
+
+def test_small_samples_allowed_for_mean_but_not_percentiles() -> None:
+    from endpoint_bench.report import assess_metric_validity
+
+    metrics = {"time_to_first_token": {"unit": "ms", "avg": 500.0, "count": 2}}
+
+    validity = assess_metric_validity(metrics=metrics, sizing={}, successful_trials=2)
+
+    assert validity["time_to_first_token"]["state"] == "valid_mean_only"
+    assert validity["time_to_first_token"]["percentiles_usable"] is False
+
+
+def test_no_successful_trials_marks_metrics_not_observed() -> None:
+    from endpoint_bench.report import assess_metric_validity
+
+    validity = assess_metric_validity(
+        metrics={"request_latency": {"unit": "ms", "avg": 0.0, "count": 0}},
+        sizing={},
+        successful_trials=0,
+    )
+
+    assert validity["request_latency"]["state"] == "not_observed"

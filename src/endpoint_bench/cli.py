@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from . import RESULT_SCHEMA_VERSION, __version__
@@ -17,7 +18,7 @@ from .aiperf import (
     run_aiperf,
     write_config,
 )
-from .cost import estimate_cost_usd
+from .cost import cost_preflight, estimate_cost_usd
 from .dry_run import build_dry_run_manifest
 from .fixtures import generate_fixture
 from .network_guard import NetworkGuardError, assert_loopback, is_loopback
@@ -34,6 +35,7 @@ from .report import (
 )
 from .trials import (
     WORKLOAD_LIVE_TURN_CONFORMANCE,
+    WORKLOAD_RECORDED_MULTI_TURN_REPLAY,
     WORKLOAD_SYNTHETIC_SINGLE_TURN,
     Trial,
     count_trials,
@@ -65,6 +67,17 @@ def build_parser() -> argparse.ArgumentParser:
     validate_registry = registry_subparsers.add_parser("validate", help="validate a provider registry")
     validate_registry.add_argument("--config", type=Path, default=Path("configs/registry.example.json"))
 
+    mock_parser = subparsers.add_parser(
+        "mock", help="run the local OpenAI-compatible mock provider"
+    )
+    mock_parser.add_argument("--port", type=int, default=18080)
+    mock_parser.add_argument(
+        "--behavior",
+        default="stream_success",
+        help="deterministic response shape, e.g. stream_success or tool_call_stream",
+    )
+    mock_parser.add_argument("--model-id", default="mock-model")
+
     probe_parser = subparsers.add_parser("probe", help="run deterministic conformance probes")
     _add_target_options(probe_parser)
     probe_parser.add_argument("--requests", type=int, default=1)
@@ -73,6 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("streaming", "tool-round-trip"),
         default="streaming",
         help="conformance scenario to exercise",
+    )
+    probe_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="emit the plan and cost estimate without sending any request",
     )
     probe_parser.add_argument(
         "--run-dir", type=Path, default=Path("runs"), help="parent directory for run artifacts"
@@ -95,6 +113,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="explicit authorization for non-loopback inference traffic",
     )
     run_parser.add_argument("--run-dir", type=Path, default=Path("runs"))
+    run_parser.add_argument(
+        "--trace-file",
+        type=Path,
+        default=None,
+        help="recorded trace for replay instead of synthetic prompts",
+    )
+    run_parser.add_argument("--trace-type", default="mooncake-trace")
+    run_parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=None,
+        help="override the profile concurrency for this run",
+    )
     _add_mode_group(run_parser)
 
     report_parser = subparsers.add_parser("report", help="build a report from a completed run")
@@ -142,7 +173,10 @@ def _credential_env(deployment: Deployment) -> tuple[dict[str, str], list[str]]:
 
 
 def _execute_guard(
-    deployment: Deployment, args: argparse.Namespace, profile: Profile
+    deployment: Deployment,
+    args: argparse.Namespace,
+    profile: Profile,
+    planned: int | None = None,
 ) -> list[str]:
     """Return blocking reasons for live execution. Empty means allowed.
 
@@ -151,7 +185,8 @@ def _execute_guard(
     resolves to loopback is rejected for unattended execution.
     """
     blockers: list[str] = []
-    planned = profile.request_count
+    if planned is None:
+        planned = profile.request_count
     loopback = is_loopback(deployment.base_url)
 
     if loopback:
@@ -195,6 +230,35 @@ def _execute_guard(
     return blockers
 
 
+def _apply_concurrency(profile: Profile, concurrency: int | None) -> Profile:
+    """Apply a validated concurrency override without mutating the profile file."""
+    if concurrency is None:
+        return profile
+    if concurrency <= 0:
+        raise AiperfError("--concurrency must be positive")
+    if concurrency > profile.request_count:
+        raise AiperfError(
+            f"--concurrency {concurrency} exceeds the profile's {profile.request_count} requests"
+        )
+    return replace(profile, concurrency=concurrency)
+
+
+def _planned_requests(trace_file: Path | None, profile: Profile) -> int:
+    """Planned request count: trace entries when replaying, else the profile."""
+    if trace_file is None:
+        return profile.request_count
+    if not trace_file.is_file():
+        raise AiperfError(f"trace file does not exist: {trace_file}")
+    lines = [
+        line
+        for line in trace_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not lines:
+        raise AiperfError(f"trace file is empty: {trace_file}")
+    return len(lines)
+
+
 def _run_directory(parent: Path, run_id: str) -> Path:
     path = parent / run_id
     if path.exists():
@@ -220,6 +284,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
 
+        if arguments.command == "mock":
+            return _command_mock(arguments)
+
         if arguments.command == "probe":
             return _command_probe(arguments)
 
@@ -239,6 +306,34 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _command_mock(arguments: argparse.Namespace) -> int:
+    """Serve the mock provider until interrupted.
+
+    Binding an explicit loopback port is what lets a contributor point the
+    benchmark at a reachable local target and get a passing run.
+    """
+    from .mock_provider import MockBehavior, MockProvider
+
+    try:
+        behavior = MockBehavior(arguments.behavior)
+    except ValueError as error:
+        available = ", ".join(item.value for item in MockBehavior)
+        raise AiperfError(f"unknown behavior `{arguments.behavior}`; available: {available}") from error
+
+    provider = MockProvider(behavior=behavior, model_id=arguments.model_id)
+    try:
+        base_url = provider.start(port=arguments.port)
+    except OSError as error:
+        raise AiperfError(
+            f"could not bind 127.0.0.1:{arguments.port} ({error}); choose another --port"
+        ) from error
+    print(f"mock provider listening at {base_url}", file=sys.stderr)
+    print(f"behavior: {behavior.value}", file=sys.stderr)
+    print("point a registry base_url at this address; press Ctrl-C to stop", file=sys.stderr)
+    provider.serve_forever()
+    return 0
+
+
 def _command_probe(arguments: argparse.Namespace) -> int:
     registry = load_registry(arguments.config)
     deployment = _resolve_target(registry, arguments.target)
@@ -254,6 +349,28 @@ def _command_probe(arguments: argparse.Namespace) -> int:
         streaming=profile.streaming,
     )
     api_key = secrets.get(deployment.credential_env_name)
+
+    attempts_per_trial = 2 if arguments.scenario == "tool-round-trip" else 1
+    preflight = cost_preflight(deployment, profile)
+
+    if arguments.dry_run:
+        _json_print(
+            {
+                "schema_version": RESULT_SCHEMA_VERSION,
+                "manifest_type": "probe_dry_run",
+                "scenario": arguments.scenario,
+                "deployment_key": deployment.deployment_key,
+                "profile": profile.name,
+                "planned_trials": arguments.requests,
+                "planned_http_attempts": arguments.requests * attempts_per_trial,
+                "inference": {"executed": False, "network_requests": 0},
+                "cost_preflight": preflight,
+                "limitations": [
+                    "This is a plan, not evidence. No request was sent.",
+                ],
+            }
+        )
+        return 0
 
     if not is_loopback(deployment.base_url):
         raise AiperfError(
@@ -313,11 +430,20 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
         _resolve_profile_path(arguments.profile_file, arguments.profile), arguments.profile
     )
 
+    profile = _apply_concurrency(profile, arguments.concurrency)
+    planned = _planned_requests(arguments.trace_file, profile)
+
     if arguments.dry_run:
         _json_print(build_dry_run_manifest(registry, deployment, profile))
         return 0
 
-    blockers = _execute_guard(deployment, arguments, profile)
+    blockers = _execute_guard(deployment, arguments, profile, planned)
+    if not is_loopback(deployment.base_url) and not os.environ.get(
+        deployment.credential_env_name or ""
+    ):
+        blockers.append(
+            f"credential environment variable {deployment.credential_env_name} is not set"
+        )
     if blockers:
         for reason in blockers:
             print(f"error: {reason}", file=sys.stderr)
@@ -325,27 +451,29 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
 
     client = BASELINE_CLIENT
     secrets, warnings = _credential_env(deployment)
-    if not secrets and deployment.credential_env_name:
-        print(
-            f"warning: {deployment.credential_env_name} is not set; "
-            "the endpoint will be called without credentials",
-            file=sys.stderr,
-        )
+    # A loopback mock has no account, so requiring a credential would make the
+    # contributor demo unrunnable. Non-loopback targets still must present one.
+    credential_env_name = deployment.credential_env_name or None
+    if not secrets and is_loopback(deployment.base_url):
+        credential_env_name = None
+        warnings = [warning for warning in warnings if "not set" not in warning]
 
     config = build_benchmark_config(
         model_id=deployment.model_id,
         base_url=deployment.base_url,
         client=client,
-        requests=profile.request_count,
+        requests=planned,
         concurrency=profile.concurrency,
         input_tokens=profile.input_tokens,
         output_tokens=profile.max_output_tokens,
         artifact_dir=Path("pending"),
-        credential_env_name=deployment.credential_env_name or None,
+        credential_env_name=credential_env_name,
         streaming=profile.streaming,
-        # Raw request/response evidence is the backbone of every run: it is the
-        # only place the HTTP status and the exact outbound headers survive.
+        # Raw request/response evidence is the backbone of every run: it is
+        # the only place the HTTP status and the exact outbound headers survive.
         capture_raw=True,
+        trace_file=arguments.trace_file,
+        trace_type=arguments.trace_type,
     )
     preview_sha = hashlib.sha256(dump_yaml(config).encode("utf-8")).hexdigest()
     run_id = f"run-{preview_sha[:12]}"
@@ -385,9 +513,14 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
         profile=profile,
         client=client,
         results=results,
-        workload_type=WORKLOAD_SYNTHETIC_SINGLE_TURN,
+        workload_type=(
+            WORKLOAD_RECORDED_MULTI_TURN_REPLAY
+            if arguments.trace_file
+            else WORKLOAD_SYNTHETIC_SINGLE_TURN
+        ),
         run_dir=run_dir,
         run=run,
+        planned_requests=planned,
         config_path=config_path,
         config_sha256=config_sha,
         trials_path=run_dir / "trials.jsonl",
