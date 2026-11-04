@@ -1,4 +1,4 @@
-# Correction 2 — measurement guardrails
+# Correction 2: measurement guardrails
 
 **Doc version:** 1.0
 **Datestamp:** 2026-11-01
@@ -16,6 +16,10 @@ The follow-up fixes four guardrail gaps:
 4. Censored latency has state `censored`, `statistic_scope: time_to_termination`, `percentiles_usable: false`, and `completion_mean_usable: false`. Increasing sample count cannot identify natural completion statistics from the unadjusted censored samples. TTFT remains separately usable.
 
 Fresh report/correction pairs are under [`gate3-corrections-2/`](gate3-corrections-2/). Source artifact, config and trial hashes identify the original evidence; all source files were checked unchanged before and after reprocessing. Outputs record the reprocessor version. No paid experiment was executed.
+
+Correction 1 reprocessed the six screening cells but not the live smoke run, and that published claim failed the same test. `runs/run-34efa7f73ac1` used a 32-token output ceiling; both responses ended `finish_reason: length`, spent all 32 completion tokens on reasoning, and emitted no visible answer. It is therefore `successful_trials: 0`, `truncated_trials: 2`, not the "both trials succeeded" recorded at the time. TTFT 575.5 ms stands; latency 699.0 ms is time-to-cap. Both sizing checks fail on that run, `provider_vs_target` included, because "128 tokens" meant 128 built-in-tokenizer tokens and the provider counted 160. Corrected evidence: [`gate3-corrections-2/run-34efa7f73ac1/`](gate3-corrections-2/run-34efa7f73ac1/). A second smoke directory from before raw capture existed carries no raw export and supports no claim.
+
+That directory now holds seven runs: the six screening cells plus this smoke run, all with `workload_type: synthetic_single_turn`. Aggregate by `provenance.profile.name`; a naive sweep of the directory counts 122 completed trials instead of the screening matrix's 120.
 
 These fixes do not recover independent client token counts, natural completion latency for truncated responses, or cache-experiment conclusions.
 

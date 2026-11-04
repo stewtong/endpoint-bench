@@ -1,0 +1,277 @@
+{
+  "analysis": "bounded_completion_latency",
+  "estimator": "lower_bounds_pooled_across_windows",
+  "interpretation": "Censored trials contribute cap-hit times as per-trial lower bounds. A lower bound above an upper-bound threshold proves failure; a lower bound below it stays inconclusive. No threshold is ratified here.",
+  "levels": {
+    "1": {
+      "ceiling_truncated": 5,
+      "censoring_fraction": 0.041666666666666664,
+      "excluded_trials": 0,
+      "failed_trials": 0,
+      "natural_completions": 115,
+      "request_latency": {
+        "mean": {
+          "censored_count": 5,
+          "censoring_fraction": 0.041666666666666664,
+          "estimator": "mean",
+          "lower_bound": 5041.778374941667,
+          "metric": "request_latency",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "mean",
+          "threshold": null,
+          "verdict": "inconclusive"
+        },
+        "p50": {
+          "censored_count": 5,
+          "censoring_fraction": 0.041666666666666664,
+          "estimator": "linear_interpolation_of_closest_ranks",
+          "lower_bound": 2767.3954784999996,
+          "metric": "request_latency",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "p50",
+          "threshold": null,
+          "verdict": "inconclusive"
+        },
+        "p95": {
+          "censored_count": 5,
+          "censoring_fraction": 0.041666666666666664,
+          "estimator": "linear_interpolation_of_closest_ranks",
+          "lower_bound": 19135.734808049998,
+          "metric": "request_latency",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "p95",
+          "threshold": null,
+          "verdict": "inconclusive"
+        }
+      },
+      "runs": [
+        "run-6cabf9e5ee70-w1-c1",
+        "run-6cabf9e5ee70-w2-c1",
+        "run-6cabf9e5ee70-w3-c1",
+        "run-6cabf9e5ee70-w4-c1",
+        "run-6cabf9e5ee70-w5-c1",
+        "run-6cabf9e5ee70-w6-c1"
+      ],
+      "sample_size": 120,
+      "time_to_first_token": {
+        "p50": {
+          "censored_count": 0,
+          "censoring_fraction": 0.0,
+          "estimator": "linear_interpolation_of_closest_ranks",
+          "lower_bound": 759.8036665,
+          "metric": "time_to_first_token",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "p50",
+          "threshold": null,
+          "verdict": "inconclusive"
+        },
+        "p95": {
+          "censored_count": 0,
+          "censoring_fraction": 0.0,
+          "estimator": "linear_interpolation_of_closest_ranks",
+          "lower_bound": 1505.6553274,
+          "metric": "time_to_first_token",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "p95",
+          "threshold": null,
+          "verdict": "inconclusive"
+        }
+      },
+      "windows": [
+        {
+          "ceiling_truncated": 2,
+          "censoring_fraction": 0.1,
+          "failed_trials": 0,
+          "natural_completions": 18,
+          "run": "run-6cabf9e5ee70-w1-c1",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 0,
+          "censoring_fraction": 0.0,
+          "failed_trials": 0,
+          "natural_completions": 20,
+          "run": "run-6cabf9e5ee70-w2-c1",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 1,
+          "censoring_fraction": 0.05,
+          "failed_trials": 0,
+          "natural_completions": 19,
+          "run": "run-6cabf9e5ee70-w3-c1",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 1,
+          "censoring_fraction": 0.05,
+          "failed_trials": 0,
+          "natural_completions": 19,
+          "run": "run-6cabf9e5ee70-w4-c1",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 1,
+          "censoring_fraction": 0.05,
+          "failed_trials": 0,
+          "natural_completions": 19,
+          "run": "run-6cabf9e5ee70-w5-c1",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 0,
+          "censoring_fraction": 0.0,
+          "failed_trials": 0,
+          "natural_completions": 20,
+          "run": "run-6cabf9e5ee70-w6-c1",
+          "sample_size": 20
+        }
+      ]
+    },
+    "2": {
+      "ceiling_truncated": 2,
+      "censoring_fraction": 0.016666666666666666,
+      "excluded_trials": 0,
+      "failed_trials": 0,
+      "natural_completions": 118,
+      "request_latency": {
+        "mean": {
+          "censored_count": 2,
+          "censoring_fraction": 0.016666666666666666,
+          "estimator": "mean",
+          "lower_bound": 5170.513425391666,
+          "metric": "request_latency",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "mean",
+          "threshold": null,
+          "verdict": "inconclusive"
+        },
+        "p50": {
+          "censored_count": 2,
+          "censoring_fraction": 0.016666666666666666,
+          "estimator": "linear_interpolation_of_closest_ranks",
+          "lower_bound": 2825.7360835,
+          "metric": "request_latency",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "p50",
+          "threshold": null,
+          "verdict": "inconclusive"
+        },
+        "p95": {
+          "censored_count": 2,
+          "censoring_fraction": 0.016666666666666666,
+          "estimator": "linear_interpolation_of_closest_ranks",
+          "lower_bound": 21540.974326749998,
+          "metric": "request_latency",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "p95",
+          "threshold": null,
+          "verdict": "inconclusive"
+        }
+      },
+      "runs": [
+        "run-2575dfce27f4-w1-c2",
+        "run-2575dfce27f4-w2-c2",
+        "run-2575dfce27f4-w3-c2",
+        "run-2575dfce27f4-w4-c2",
+        "run-2575dfce27f4-w5-c2",
+        "run-2575dfce27f4-w6-c2"
+      ],
+      "sample_size": 120,
+      "time_to_first_token": {
+        "p50": {
+          "censored_count": 0,
+          "censoring_fraction": 0.0,
+          "estimator": "linear_interpolation_of_closest_ranks",
+          "lower_bound": 787.8603335,
+          "metric": "time_to_first_token",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "p50",
+          "threshold": null,
+          "verdict": "inconclusive"
+        },
+        "p95": {
+          "censored_count": 0,
+          "censoring_fraction": 0.0,
+          "estimator": "linear_interpolation_of_closest_ranks",
+          "lower_bound": 1664.68649855,
+          "metric": "time_to_first_token",
+          "note": "threshold is unratified; a bound cannot supply a pass mark",
+          "operator": "<=",
+          "sample_size": 120,
+          "statistic": "p95",
+          "threshold": null,
+          "verdict": "inconclusive"
+        }
+      },
+      "windows": [
+        {
+          "ceiling_truncated": 0,
+          "censoring_fraction": 0.0,
+          "failed_trials": 0,
+          "natural_completions": 20,
+          "run": "run-2575dfce27f4-w1-c2",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 0,
+          "censoring_fraction": 0.0,
+          "failed_trials": 0,
+          "natural_completions": 20,
+          "run": "run-2575dfce27f4-w2-c2",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 0,
+          "censoring_fraction": 0.0,
+          "failed_trials": 0,
+          "natural_completions": 20,
+          "run": "run-2575dfce27f4-w3-c2",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 2,
+          "censoring_fraction": 0.1,
+          "failed_trials": 0,
+          "natural_completions": 18,
+          "run": "run-2575dfce27f4-w4-c2",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 0,
+          "censoring_fraction": 0.0,
+          "failed_trials": 0,
+          "natural_completions": 20,
+          "run": "run-2575dfce27f4-w5-c2",
+          "sample_size": 20
+        },
+        {
+          "ceiling_truncated": 0,
+          "censoring_fraction": 0.0,
+          "failed_trials": 0,
+          "natural_completions": 20,
+          "run": "run-2575dfce27f4-w6-c2",
+          "sample_size": 20
+        }
+      ]
+    }
+  }
+}

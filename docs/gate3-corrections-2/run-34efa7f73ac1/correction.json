@@ -1,0 +1,279 @@
+{
+  "accounting_source": "client_tokenizer",
+  "aggregate_field_changes": [
+    {
+      "after": 0,
+      "before": 2,
+      "field": "counters.successful_trials"
+    },
+    {
+      "after": 2,
+      "before": null,
+      "field": "counters.truncated_trials"
+    }
+  ],
+  "completion": {
+    "ceiling_truncated": 2,
+    "content_filtered": 0,
+    "finish_reason_absent": 0,
+    "finish_reason_counts": {
+      "length": 2
+    },
+    "finish_reason_unknown": 0,
+    "latency_censored": true,
+    "latency_censored_fraction": 1.0,
+    "natural_completions": 0,
+    "protocol_completed_trials": 2
+  },
+  "corrected_report_schema_version": "0.2.0",
+  "correction_type": "artifact_reprocess",
+  "counters_after": {
+    "cancelled_trials": 0,
+    "failed_trials": 0,
+    "http_attempts": 2,
+    "planned_trials": 2,
+    "protocol_completed_trials": 2,
+    "skipped_trials": 0,
+    "started_trials": 2,
+    "successful_trials": 0,
+    "transport_completed_trials": 2,
+    "truncated_trials": 2
+  },
+  "counters_before": {
+    "cancelled_trials": 0,
+    "failed_trials": 0,
+    "http_attempts": 2,
+    "planned_trials": 2,
+    "protocol_completed_trials": 2,
+    "skipped_trials": 0,
+    "started_trials": 2,
+    "successful_trials": 2,
+    "transport_completed_trials": 2
+  },
+  "engine": {
+    "name": "aiperf",
+    "schema_validated": true,
+    "summary_schema_version": "1.4",
+    "version": "0.13.0"
+  },
+  "limitations": [
+    "This report describes client-observed behavior for one endpoint configuration, not model capability.",
+    "Metrics are reported with AIPerf's own units; denominator changes invalidate comparison.",
+    "Workload token sizing failed its authoritative check for this run. Requested-size claims are unsupported; provider-token throughput remains an observation of the delivered workload. Client-tokenized throughput requires independent token agreement. Latency and other directly observed timings remain usable and are marked valid individually.",
+    "2 of 2 completed trials (100%) stopped at the configured output ceiling (`finish_reason: length`). Those trials did not finish naturally, so `request_latency` is a right-censored lower bound on time-to-completion and is marked as censored. Time-to-first-token is unaffected. Success counters exclude these trials and report them as `truncated_trials`.",
+    "2 completed trial(s) spent the entire completion budget on provider-reported reasoning tokens and emitted no visible answer content. Output throughput in this run describes reasoning-token emission, not answer generation.",
+    "Cache-write counts are not exposed by AIPerf 0.13.0 as a metric. They were recovered from the raw streamed `usage.prompt_tokens_details.created_cache_tokens` field and are labelled with that source. Cache-read counts come from AIPerf's normalized `usage_prompt_cache_read_tokens` metric."
+  ],
+  "per_trial_field_changes": {
+    "attribution": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "cache_read_tokens": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "cache_write_tokens": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "client_provider_agreement": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "finish_class": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "finish_reason": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "http_status": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "outcome": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "outcome_detail": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "primary_check": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "provider_target_conformance": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "reasoning_tokens": {
+      "changed": 2,
+      "new_trial": 0,
+      "unchanged": 0
+    },
+    "sizing_verified": {
+      "changed": 0,
+      "new_trial": 0,
+      "unchanged": 2
+    }
+  },
+  "per_trial_samples": [
+    {
+      "after": "output_truncated",
+      "before": "success",
+      "field": "outcome",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": "finish_reason_length_at_max_completion_tokens_32",
+      "before": "completed",
+      "field": "outcome_detail",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": "harness",
+      "before": "unknown",
+      "field": "attribution",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": "length",
+      "before": null,
+      "field": "finish_reason",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": "ceiling",
+      "before": null,
+      "field": "finish_class",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": 200,
+      "before": null,
+      "field": "http_status",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": "client_vs_provider",
+      "before": null,
+      "field": "primary_check",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": "failed",
+      "before": null,
+      "field": "provider_target_conformance",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": "failed",
+      "before": null,
+      "field": "client_provider_agreement",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": 0,
+      "before": null,
+      "field": "cache_read_tokens",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": 128,
+      "before": null,
+      "field": "cache_write_tokens",
+      "trial_id": "aiperf-0000"
+    },
+    {
+      "after": 32,
+      "before": null,
+      "field": "reasoning_tokens",
+      "trial_id": "aiperf-0000"
+    }
+  ],
+  "provider_telemetry": {
+    "cache_write_source": "raw_response_usage",
+    "metrics": {
+      "cache_read_tokens": {
+        "sum": 0,
+        "trials_reporting": 2,
+        "trials_total": 2
+      },
+      "cache_write_tokens": {
+        "sum": 256,
+        "trials_reporting": 2,
+        "trials_total": 2
+      },
+      "reasoning_tokens": {
+        "sum": 64,
+        "trials_reporting": 2,
+        "trials_total": 2
+      },
+      "visible_output_tokens": {
+        "sum": 0,
+        "trials_reporting": 2,
+        "trials_total": 2
+      }
+    },
+    "reasoning_only_completions": 2,
+    "sources": [
+      "aiperf_metric",
+      "derived:provider_output_minus_reasoning",
+      "raw_response_usage"
+    ]
+  },
+  "reprocessor_version": "0.1.2",
+  "requested_input_tokens": 128,
+  "schema_version": "1.0",
+  "source_artifact_sha256": {
+    "profile_export.jsonl": "1b79171f73fe59eac530556cd00c2909672cc359896baafa48db12f3f95ca750",
+    "profile_export_aiperf.json": "46fb140a9d925d6102ddd0f7c034796eac870110b1c08eeb4e95ac37d0a44d9b",
+    "profile_export_raw.jsonl": "0d9949ad67236ef8ddbb4b34d21b934b7d58bc77c9b1044e80d5f73bdf1ff8d0"
+  },
+  "source_report_schema_version": "0.1.0",
+  "source_run_dir_name": "run-34efa7f73ac1",
+  "source_run_id": "run-34efa7f73ac1",
+  "token_accounting": {
+    "accounting_sources": {
+      "client_tokenizer": 2
+    },
+    "claims_supported": false,
+    "client_estimates_coinciding_with_provider": 0,
+    "client_vs_provider": {
+      "failed": 2,
+      "not_observed": 0,
+      "unverifiable": 0,
+      "verified": 0
+    },
+    "outside_tolerance": 2,
+    "primary_checks": {
+      "client_vs_provider": 2,
+      "provider_vs_target": 0
+    },
+    "provider_vs_target": {
+      "failed": 2,
+      "not_observed": 0,
+      "unverifiable": 0,
+      "verified": 0
+    },
+    "trials_evaluated": 2,
+    "unverifiable": 0,
+    "within_tolerance": 0
+  },
+  "tolerance_pct": 10.0,
+  "unrecoverable": []
+}

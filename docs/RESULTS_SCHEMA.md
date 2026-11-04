@@ -1,6 +1,6 @@
 # Result schema contract
 
-**Schema version:** `0.2.0` — dry-run manifests, probe manifests, normalized trial records, and run reports. Trial records and reports carry their own document versions so each can evolve independently.
+**Schema version:** `0.2.0` ;  dry-run manifests, probe manifests, normalized trial records, and run reports. Trial records and reports carry their own document versions so each can evolve independently.
 
 Version history:
 
@@ -112,8 +112,8 @@ The measures are retained separately and never collapsed:
 | `provider_output_tokens` | The provider's `usage.completion_tokens`. |
 | `observed_output_tokens` | What the client counted in the response. `null` under provider accounting. |
 | `client_estimate_note` | Why a client measure is absent, when it is. |
-| `provider_vs_target` | `{discrepancy_pct, verdict}` — did the provider see the requested workload size? |
-| `client_vs_provider` | `{discrepancy_pct, verdict}` — does an independent client tokenizer agree with the provider? |
+| `provider_vs_target` | `{discrepancy_pct, verdict}` ;  did the provider see the requested workload size? |
+| `client_vs_provider` | `{discrepancy_pct, verdict}` ;  does an independent client tokenizer agree with the provider? |
 | `discrepancy_pct` | Retained name for the client-versus-provider difference. |
 | `tolerance_pct` | Profile tolerance applied to both comparisons. |
 | `primary_check` | Which comparison governs the verdict: `client_vs_provider` under client accounting, `provider_vs_target` under provider accounting. |
@@ -130,10 +130,10 @@ The anti-circularity rule is enforced at construction: under provider accounting
 | Field | Meaning | Source |
 |---|---|---|
 | `cache_read_tokens` | Prompt tokens served from cache. | AIPerf `usage_prompt_cache_read_tokens`, else raw `cached_tokens`. |
-| `cache_write_tokens` | Prompt tokens written to cache. | Raw `usage.prompt_tokens_details.created_cache_tokens` only — AIPerf 0.13.0 exposes no metric for this. |
+| `cache_write_tokens` | Prompt tokens written to cache. | Raw `usage.prompt_tokens_details.created_cache_tokens` only ;  AIPerf 0.13.0 exposes no metric for this. |
 | `reasoning_tokens` | Provider-reported reasoning tokens. | AIPerf `usage_reasoning_tokens`, else raw. |
 | `visible_output_tokens` | `provider_output_tokens − reasoning_tokens`. | Derived. `0` means the entire budget was reasoning. |
-| `sources` | Per-field provenance: `aiperf_metric`, `raw_response_usage`, or the derivation used. | — |
+| `sources` | Per-field provenance: `aiperf_metric`, `raw_response_usage`, or the derivation used. | ;  |
 
 Absent stays `null` and is never rendered as zero. A zero the provider actually sent is preserved as a real observation. Run-level aggregates publish `sum` next to `trials_reporting` and `trials_total` so a partial total cannot be mistaken for a complete one.
 
@@ -159,7 +159,7 @@ Written to `<run-dir>/report.json` by `endpoint-bench run`, and comparable by `e
 |---|---|
 | `client_profile` | Explicit client configuration plus a stable `identity` hash. Baseline and affinity-enabled profiles are distinct identities. `token_accounting_source` is `client_tokenizer` or `provider_usage`. |
 | `engine` | AIPerf version, summary schema version, and whether the schema was validated before parsing. |
-| `benchmark_failed` | True when the endpoint produced nothing scoreable: no successful responses *and* no ceiling-truncated ones. A run in which every response was cut by our own output ceiling is not a benchmark failure — it measured real time-to-first-token and token rates — and is reported as truncated with censoring limitations instead. |
+| `benchmark_failed` | True when the endpoint produced nothing scoreable: no successful responses *and* no ceiling-truncated ones. A run in which every response was cut by our own output ceiling is not a benchmark failure (it measured real time-to-first-token and token rates) and is reported as truncated with censoring limitations instead. |
 | `counters`, `outcomes` | Accounting as above, including `truncated_trials`. |
 | `metrics` | Selected AIPerf metrics with `unit` preserved. Absent metrics stay absent. Includes provider cache-read and reasoning metrics where AIPerf emitted them. |
 | `token_accounting` | Aggregate sizing verdict over both comparisons. `claims_supported` is false unless every trial's authoritative check is verified. |
@@ -207,7 +207,7 @@ Written to `<out-dir>/correction.json` by `endpoint-bench reprocess`, alongside 
 | `completion`, `token_accounting`, `provider_telemetry` | Recovered aggregates. |
 | `unrecoverable` | Fields the original evidence cannot support, each with the reason. Listed rather than computed. |
 
-A reprocess never re-executes a request and never claims a field the original artifacts do not contain. An observation the original run never made — an absent client tokenization, an absent provider counter — is reported as unrecoverable instead of reconstructed.
+A reprocess never re-executes a request and never claims a field the original artifacts do not contain. An observation the original run never made (an absent client tokenization, an absent provider counter) is reported as unrecoverable instead of reconstructed.
 
 ## Compatibility policy
 
@@ -233,3 +233,7 @@ Malformed SSE data makes a trial a protocol failure even if a later frame contai
 Each metric validity entry now includes `statistic_scope`, `completion_mean_usable`, and `workload_claims_supported`. A censored request duration has state `censored`, scope `time_to_termination`, `percentiles_usable: false`, and `completion_mean_usable: false`, regardless of sample count. Its retained numeric summaries describe termination, not natural completion. TTFT is unaffected by the output ceiling.
 
 Provider-derived token counts and throughput remain observations of the delivered workload even when target sizing fails; `workload_claims_supported: false` prevents treating them as requested-size evidence. Client-tokenized throughput still requires independent client/provider agreement. These are additive fields in the unreleased 0.2.0 contract.
+
+### Session-dynamics schema (software 0.1.3)
+
+Session-dynamics evidence is a separate contract from the trial schema above. It records one cell, one record per session, and one record per model call, with explicit scenario/template/window/group/session/turn/request identity, per-turn queue/idle/active timing, first-any/first-reasoning/first-visible timestamps, provider input/output/reasoning/cache telemetry, input-bound state, and deterministic-tool continuation. The cell and analysis schemas are documented in [`SESSION_RESULTS_SCHEMA.md`](SESSION_RESULTS_SCHEMA.md). They do not replace trial schema `0.2.0`, and session evidence is never pooled with single-turn AIPerf trials.

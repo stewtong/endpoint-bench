@@ -6,8 +6,8 @@ Everything here is synthetic. It demonstrates the measurement pipeline, not the 
 
 ## Files
 
-- `registry.json` — a loopback target on `127.0.0.1:18080`.
-- `agent-trace.jsonl` — deterministic Mooncake-format trace: 4 agent sessions, 3 turns each, input growing 512 → 1024 → 1536 tokens, 150 ms between turns. Validated by `aiperf validate --target mooncake-trace`.
+- `registry.json` ;  a loopback target on `127.0.0.1:18080`.
+- `agent-trace.jsonl` ;  deterministic Mooncake-format trace: 4 agent sessions, 3 turns each, input growing 512 → 1024 → 1536 tokens, 150 ms between turns. Validated by `aiperf validate --target mooncake-trace`.
 
 ## Run it
 

@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0",
+  "plan": "pilot-10k-2048",
+  "doc_version": "1.0",
+  "datestamp": "2026-11-01",
+  "status": "prepared_not_executed",
+  "identity": {
+    "distinct_from": "multiwindow-10k-c1-c2",
+    "reason": "Separate plan and profile. The 1024-token experiment is not mutated into this one; different output ceiling means different workload identity."
+  },
+  "purpose": "exploratory_ceiling_assessment_not_qualification",
+  "authorization": {
+    "execution_authorized": false,
+    "requires": [
+      "--authorize-live",
+      "NEBIUS_API_KEY present in the environment",
+      "pricing re-verified before the run",
+      "per-run --max-usd above the estimator output"
+    ],
+    "note": "Prepared only. No paid request has been sent for this pilot."
+  },
+  "design": {
+    "total_requests": 40,
+    "runs": 2,
+    "requests_per_run": 20,
+    "concurrency_levels": [
+      1,
+      2
+    ],
+    "requested_input_tokens": 10240,
+    "output_ceiling_per_request": 2048,
+    "client_profile": "baseline-normal-client-server-accounting",
+    "client_settings": {
+      "session_affinity": false,
+      "automatic_retries": false,
+      "connection_reuse": "pooled",
+      "token_accounting": "provider_usage",
+      "random_seed": 42
+    },
+    "interleaving": "Two back-to-back runs in one window, C=1 then C=2, so within-window drift affects both. Not randomised: with two runs an order can be stated outright.",
+    "ceiling_rationale": "The ceiling is chosen to observe completion length, not to certify adequacy. Screening censored 117 of 120 at 256 tokens; the three natural completions (217, 222, 249) are a selected subset and do not identify the tail. 2048 is a declared probe value.",
+    "ceiling_adequacy_established": false,
+    "estimated_wall_time_minutes": 15,
+    "wall_time_basis": "Screening 10K cells ran at 1.65-2.21 s/request at a 256-token ceiling. A 2048 ceiling permits roughly eight times the output, so per-request latency is expected to rise substantially. Planning estimate, not a measurement."
+  },
+  "stop_rule": {
+    "evaluate_after": "both runs",
+    "continue_only_if": [
+      "zero ceiling truncations across both runs",
+      "actual HTTP attempts equal planned requests in each run",
+      "validated engine schema and raw evidence present in each run",
+      "provider-versus-target conformance within the profile tolerance"
+    ],
+    "on_failure": "Stop. Preserve all pilot artifacts. Report endpoint errors as outcomes. Review censoring, errors, budget and schedule, then version the plan before any further paid run.",
+    "prohibited": [
+      "retrying a trial",
+      "replacing a trial",
+      "escalating the output cap automatically",
+      "merging runs that used different ceilings"
+    ],
+    "interpretation_limit": "A clean pilot does not certify the ceiling. With zero censoring in 40 trials the one-sided 95% exact binomial upper bound on the censoring probability is 1 - 0.05^(1/40) = 7.22%. Dependence and temporal drift weaken that model further."
+  },
+  "pricing_basis": {
+    "source": "https://tokenfactory.nebius.com/models (rendered catalog)",
+    "effective_date": "2026-11-01",
+    "prompt_per_million_tokens": 0.3,
+    "completion_per_million_tokens": 1.2,
+    "verified": true,
+    "safety_multiplier": 1.5,
+    "note": "Historical planning arithmetic. Re-verify pricing before executing anything."
+  },
+  "cost": {
+    "estimator": "endpoint_bench.cost.estimate_cost_usd",
+    "per_run_estimate_usd": 0.165888,
+    "total_estimate_usd": 0.331776,
+    "max_usd_ceiling_per_run": 0.2,
+    "nominal_input_tokens": 409600,
+    "nominal_output_tokens": 81920,
+    "note": "Client-side conservative bound on nominal exposure, not a provider billing limit and not a prediction of spend."
+  },
+  "qualification": {
+    "evaluator_implemented": false,
+    "contract": "docs/qualification/10k-slo-contract.json",
+    "note": "This pilot cannot qualify an endpoint. Pilot evidence is excluded from future qualification evidence."
+  },
+  "runs_detail": [
+    {
+      "run_index": 1,
+      "sequence": 1,
+      "profile": "pilot-10k-2048",
+      "concurrency": 1,
+      "requests": 20,
+      "requested_input_tokens": 204800,
+      "requested_output_token_ceiling_per_request": 2048,
+      "nominal_output_tokens": 40960,
+      "max_requests": 20,
+      "max_usd_ceiling": 0.2,
+      "estimated_cost_usd": 0.165888,
+      "estimated_cost_within_guard": true,
+      "request_timeout_s": 240.0,
+      "max_output_tokens": 2048
+    },
+    {
+      "run_index": 2,
+      "sequence": 2,
+      "profile": "pilot-10k-2048",
+      "concurrency": 2,
+      "requests": 20,
+      "requested_input_tokens": 204800,
+      "requested_output_token_ceiling_per_request": 2048,
+      "nominal_output_tokens": 40960,
+      "max_requests": 20,
+      "max_usd_ceiling": 0.2,
+      "estimated_cost_usd": 0.165888,
+      "estimated_cost_within_guard": true,
+      "request_timeout_s": 240.0,
+      "max_output_tokens": 2048
+    }
+  ]
+}

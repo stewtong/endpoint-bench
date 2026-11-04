@@ -62,6 +62,35 @@ assert len({r["session_id"] for r in rows}) == 4
 echo "==> prepared plan and qualification contract match the code"
 uv run python scripts/check_plan_contract.py
 
+echo "==> session-dynamics preflight makes zero requests"
+rm -rf /tmp/verify-session-plan /tmp/verify-session-preflight
+uv run endpoint-bench session generate --out /tmp/verify-session-plan \
+  > /tmp/verify-session-plan.json
+uv run python -c 'import json; m=json.load(open("/tmp/verify-session-plan/manifest.json")); assert m["totals"]["cells"] == 54 and m["totals"]["max_inference_attempts"] == 1038, m["totals"]; assert m["release"]["live_released_operation_ids"] == []'
+uv run endpoint-bench session dry-run \
+  --config configs/registry.example.json --target offline-mock-smoke \
+  --out /tmp/verify-session-preflight --max-usd 31 \
+  > /tmp/verify-session-preflight.json
+uv run python -c 'import json; m=json.load(open("/tmp/verify-session-preflight.json")); assert m["inference"]["network_requests"] == 0 and m["max_inference_attempts"] == 1038, m'
+
+echo "==> same-day default preflight makes zero requests and has no calendar anchor"
+rm -rf /tmp/verify-sameday
+uv run endpoint-bench session same-day --out /tmp/verify-sameday \
+  > /tmp/verify-sameday.json
+uv run python -c '
+import json
+m = json.load(open("/tmp/verify-sameday/manifest.json"))
+p = json.load(open("/tmp/verify-sameday/plan.json"))
+assert m["schema_version"] == "session-manifest/2.0.0", m["schema_version"]
+assert m["totals"]["cells"] == 30 and m["totals"]["max_inference_attempts"] == 558, m["totals"]
+assert p["totals"]["phases"] == {"session_screening": 27, "context_sentinels": 3}, p["totals"]["phases"]
+assert m["release"]["live_released_operation_ids"] == [] and m["release"]["release_anchor_utc"] is None
+assert p["run_mode"]["calendar_anchors"] is False and p["run_mode"]["scheduled_waits"] is False
+assert all(item["not_before_offset_s"] == 0 for item in p["schedule"] if item["operation_id"])
+assert m["timeouts"]["invocation_deadline_s"] == 21600
+'
+uv run python -c 'import json; m=json.load(open("/tmp/verify-sameday.json")); assert m["inference"]["network_requests"] == 0 and m["cells"] == 30, m'
+
 echo "==> reprocess corrects legacy evidence and leaves the source untouched"
 uv run python scripts/check_reprocess.py
 

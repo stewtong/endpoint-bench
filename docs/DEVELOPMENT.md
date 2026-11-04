@@ -23,7 +23,38 @@ uv run pytest tests/test_conformance.py
 uv run pytest tests/test_tool_conformance.py
 uv run pytest tests/test_process_lifecycle.py
 uv run pytest tests/test_network_guard.py
+uv run pytest tests/test_session_program.py tests/test_session_engine.py
+uv run pytest tests/test_session_evidence.py tests/test_session_cli.py
+uv run pytest tests/test_session_same_day.py
 ```
+
+Same-day default (no credentials, no inference):
+
+```bash
+uv run endpoint-bench session same-day --out /tmp/sameday
+```
+
+The loopback end-to-end regression is `tests/test_session_same_day.py::test_same_day_full_loopback_run_writes_analysis_and_report`. It exercises the mock provider, all 30 cells, analysis and the final report.
+
+Legacy temporal planning commands (preserved, not the default):
+
+```bash
+uv run endpoint-bench session generate --out /tmp/session-plan
+uv run endpoint-bench session dry-run \
+  --config configs/registry.example.json --target offline-mock-smoke \
+  --out /tmp/session-preflight --max-usd 31
+uv run endpoint-bench session analyze --run-dir /tmp/session-run --allow-partial
+```
+
+The legacy target-bound review packet is rebuilt with:
+
+```bash
+uv run python scripts/build_session_preflight.py \
+  --target configs/session-programs/session-dynamics-v1.target.json \
+  --out docs/session-dynamics-v1
+```
+
+`session same-day --execute` is the default paid path; `session execute` is the legacy per-cell path. Both refuse a non-loopback target without explicit authorization, and the legacy path also requires an exact release plus the exact cell request budget and dollar envelope. Never run either while awaiting review.
 
 Tool-call round trip against a configured local target:
 
@@ -81,11 +112,14 @@ uv run endpoint-bench run ... --token-accounting server
   - `trials.py`: lifecycle/outcome model, counters, JSONL serialization.
   - `probes.py`: deterministic conformance client.
   - `mock_provider.py`, `fixtures.py`: offline evidence generation.
+  - `session_program.py`: session-dynamics matrix, templates, plan and manifest for both the same-day default (schema 2.0) and the legacy temporal program (schema 1.0).
+  - `session_engine.py`: live-turn session runner, timing, tools, restart-safe calls.
+  - `session_evidence.py`: evidence validation, journal, aggregation and report.
   - `aiperf.py`: pinned engine wrapper, config generation, artifact parsing.
   - `report.py`, `sanitize.py`: reporting, comparison, redaction.
 - `configs/`: checked-in non-secret example configuration and profile families.
 - `docs/`: methodology, schema, decisions, and development documentation.
-- `examples/synthetic/`: clearly synthetic dry-run artifacts.
+- `examples/synthetic/`: clearly synthetic dry-run and normalized-report artifacts.
 - `tests/`: offline tests.
 
 ## Change discipline

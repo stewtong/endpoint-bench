@@ -47,7 +47,7 @@ Use small synthetic fixtures under `tests/fixtures/` or `examples/synthetic/`. L
 
 ## Result schemas
 
-Update `docs/RESULTS_SCHEMA.md` for any normalized field. Use additive nullable fields when possible, bump the schema version for semantic changes, and explain migration/compatibility in the documentation. Unknown values must be `null` or explicit `unknown`—not zero.
+Update `docs/RESULTS_SCHEMA.md` for any normalized field. Use additive nullable fields when possible, bump the schema version for semantic changes, and explain migration/compatibility in the documentation. Unknown values must be `null` or explicit `unknown`; not zero.
 
 ## Issues and pull requests
 

@@ -1,4 +1,4 @@
-# Screening results — 2026-11-02
+# Screening results: 2026-11-02
 
 > **Corrected 2026-11-01.** Two claims below are wrong and one is narrower than stated.
 > The harness scored every protocol-completed response as `success` without reading
@@ -18,7 +18,7 @@
 |---|---|
 | Deployment | `deepseek-ai/DeepSeek-V4.1-Flash-1017` on `api.tokenfactory.nebius.com`, region `us-north1` |
 | Engine | AIPerf 0.13.0, summary schema 1.4, validated |
-| Client | `baseline-normal-client-server-accounting` — session affinity disabled, no retries, pooled connections, `use_server_token_count` |
+| Client | `baseline-normal-client-server-accounting` ;  session affinity disabled, no retries, pooled connections, `use_server_token_count` |
 | Token accounting | Provider `usage`. Client tokenizer was not used. |
 | Workload | Synthetic single-turn, 256-token output ceiling |
 | Pricing basis | $0.30 / 1M input, $1.20 / 1M output (catalog, 2026-11-01) |
@@ -39,7 +39,7 @@ Totals: 120 planned trials, 120 successful, 120 HTTP attempts, 0 failures, 0 ret
 ## What this establishes
 
 1. **Request accounting is exact.** Planned trials equal HTTP attempts in every cell. No hidden retries, no readiness probes, no warmup traffic.
-2. **Provider token accounting verifies delivered size.** Reported input averaged within roughly 1–4% of the profile target at 1K, 10K, and 32K, so `sizing_verified` was true in every cell and token-normalized metrics were marked `valid` rather than withheld.
+2. **Provider token accounting verifies delivered size.** Reported input averaged within roughly 1 to 4% of the profile target at 1K, 10K, and 32K, so `sizing_verified` was true in every cell and token-normalized metrics were marked `valid` rather than withheld.
 3. **The endpoint handled all six cells without error.** Zero failures, zero timeouts, zero truncations at a 256-token output ceiling.
 4. **The 32K cells completed**, which exercises real context sizes but establishes nothing about the advertised 1M window.
 

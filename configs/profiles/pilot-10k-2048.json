@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "name": "pilot-10k-2048",
+  "description": "Exploratory pilot cell: 10,240 requested input tokens with a 2048-token output ceiling, one concurrency level per run. It exists to observe how long responses actually run at 10k input, because the 256-token screening ceiling censored 117 of 120 responses and the three natural completions (217-249 tokens) do not identify the tail above 256. A clean pilot does not certify the ceiling: with zero censoring in 40 trials the one-sided 95% exact upper bound on the censoring probability is about 7.2%, and dependence or drift weaken even that. A pilot truncation triggers review, not automatic cap escalation.",
+  "request_count": 20,
+  "input_tokens": 10240,
+  "max_output_tokens": 2048,
+  "concurrency": 1,
+  "streaming": true,
+  "timeout_s": 240,
+  "token_tolerance_pct": 10.0,
+  "qualification": {
+    "status": "provisional",
+    "screening": false,
+    "exploratory": true,
+    "contract": "docs/qualification/10k-slo-contract.json",
+    "note": "Pilot evidence is exploratory. It must not be relabelled as qualification evidence after thresholds are chosen. The pilot is only suggestive, never confirmatory."
+  }
+}

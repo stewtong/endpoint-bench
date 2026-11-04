@@ -1,0 +1,18 @@
+{
+  "export": "public-derived-observations/1.0",
+  "observations": 648,
+  "context_checks": 18,
+  "removed": [
+    "prompts",
+    "responses",
+    "credentials",
+    "local filesystem paths",
+    "operator configuration"
+  ],
+  "files": {
+    "observations.jsonl": "3e842f17f77148b1dc22ee03a2728ec05222175082d2e5b9cc4f5fcfcff5e133",
+    "context-checks.json": "15fb096728dfc70a2bc821c37db0962297eafd0cc0f46574e6cf6562b24c31e2"
+  },
+  "original_evidence": "Preserved locally with immutable manifests, journals and SHA-256 records. Exported fields are copied without changing measurement values.",
+  "source_report_sha256": "29c531452759827269a342288130eaa7f80beee2e0d6b4177b2d3b7fa71fcf25"
+}

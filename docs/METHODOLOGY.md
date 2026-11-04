@@ -1,7 +1,7 @@
 # Benchmark methodology
 
-**Version:** 0.5.3 — **Datestamp:** 2026-11-01
-**Status:** Design contract. The repository implements offline configuration validation, dry-run manifests, normalized trial evidence with per-metric validity, deterministic conformance probes, a pinned AIPerf 0.13.0 wrapper, and agent-shaped trace replay. Six screening cells and a live tool-call continuation have run against one deployment. No endpoint has been qualified, and no capacity, reliability, cache, or long-context claim is supported.
+**Version:** 0.5.5 ;  **Datestamp:** 2026-11-03
+**Status:** Implemented measurement methods include AIPerf workloads, streaming/tool conformance, dependent session turns and a same-day foreground benchmark. The accepted results cover 648 session/context calls; see [published results](results/2026-11-session-dynamics/README.md) for scope and sizing limits. Qualification thresholds remain unset.
 
 ## Measurement scope
 
@@ -124,17 +124,17 @@ Escalate only after serialized/tokenized size and output headroom are verified. 
 
 Four token measures are retained separately and never collapsed:
 
-1. **Target** — the workload size the profile requested.
-2. **Client-estimated** — what the client tokenizer counted in the serialized request.
-3. **Provider-reported** — what the provider returned in `usage`.
-4. **Observed output** — what the client counted in the response.
+1. **Target** ;  the workload size the profile requested.
+2. **Client-estimated** ;  what the client tokenizer counted in the serialized request.
+3. **Provider-reported** ;  what the provider returned in `usage`.
+4. **Observed output** ;  what the client counted in the response.
 
 A purported workload size is not evidence of a delivered workload. No correction factor is ever applied to a reported count. If the numbers disagree, the run is reported as disagreeing.
 
 Two comparisons answer two different questions, and a verdict must name which one it performed:
 
-- **provider versus target** — did the provider see the workload size the profile requested? Available in both accounting modes, and authoritative when token counts come from the provider.
-- **client versus provider** — does an independent client tokenizer agree with the provider? Available only when a client tokenizer actually ran.
+- **provider versus target** ;  did the provider see the workload size the profile requested? Available in both accounting modes, and authoritative when token counts come from the provider.
+- **client versus provider** ;  does an independent client tokenizer agree with the provider? Available only when a client tokenizer actually ran.
 
 Under provider token accounting, the engine derives its input and output length metrics *from the provider's own usage*. Comparing those against provider usage compares a number with itself and always agrees. An implementation must therefore leave the client measure absent in that mode rather than populate it from the provider, and must not report the agreement as a verification.
 
@@ -170,7 +170,7 @@ A failed exchange is attributed to exactly one of `provider`, `model`, `harness`
 
 Screening results require smaller samples and must be labeled provisional. Stronger qualification requires repeated observations across time windows, adequate sample counts, uncertainty reporting, and documented exclusion rules. Tail percentiles are meaningful only when sample size and stability support them. Interleave endpoint measurements where practical to reduce time-of-day and shared-capacity confounding.
 
-Observed capacity boundaries apply to the tested account, region, time, traffic shape, and endpoint—not to a universal provider limit.
+Observed capacity boundaries apply to the tested account, region, time, traffic shape, and endpoint; not to a universal provider limit.
 
 ## Qualification
 
@@ -192,6 +192,30 @@ Malformed stream frames cannot be rescued by a later natural stop. Successful no
 
 Workload conformance and metric provenance are separate. Provider-token throughput describes the workload actually delivered even when it differs from the target. Such a run cannot support a requested-size or long-context claim. Client-tokenized throughput needs independent tokenizer agreement.
 
-Censored latency summaries describe time to termination. Neither their mean nor their percentiles represent natural completion latency; completion percentiles remain unusable even above the sample-count floor. No censoring-adjusted estimator is implemented.
+Censored latency summaries describe time to termination. Neither their mean nor their percentiles represent natural completion latency without a bounded interpretation. An earlier version of this section said no censoring-adjusted estimator was implemented; the bounded extension below now implements one.
 
-The six-window 10K plan is exploratory, with ten-minute start spacing and a first-window pilot. Its 1024-token cap is a hypothesis: the three naturally completed screening responses were selected from a heavily censored population. Stop and version the plan if the pilot is censored or its evidence is invalid. Qualification requires a later frozen contract and ratified objectives, including endpoint error rate; genuine endpoint errors are outcomes rather than automatic evidence invalidation. The contract remains a specification, not an evaluator.
+## Bounded completion latency
+
+A cap-hit duration is a per-trial lower bound, not a missing value. If `L_i <= T_i` for every trial, every order statistic of the lower bounds is a lower bound on the corresponding order statistic of the true completion times. A sample p50 or p95 of `L` is therefore a lower bound on the true p50 or p95. `endpoint_bench.bounds` implements this for `p50`, `p95`, and `mean`.
+
+The asymmetry is the point:
+
+- A lower bound **above** an upper-bound objective (`p50 <= X`) proves failure: the true value is at least the bound, so it is also above `X`.
+- A lower bound **below** the objective cannot prove success. The true value may be above `X`, so the result stays `inconclusive`.
+- The bounded analysis therefore never returns `qualified` from a lower bound alone.
+
+Censored trials are never dropped. Throughput and visible-answer statistics remain withheld or descriptive: a capped response's observed throughput is not a lower bound on answer throughput. Time to first token precedes the cap and remains exact.
+
+This extension is outside the 1.1 contract's `dq.truncation_rate` gate, which still treats any censoring as invalid. It describes what a censored sample supports without changing that contract's verdict rules.
+
+The six-window 10K plan is exploratory, with ten-minute start spacing and a first-window pilot. Its 1024-token cap is a hypothesis: the three naturally completed screening responses were selected from a heavily censored population. Stop and version the plan if the pilot is censored or its evidence is invalid. Qualification requires a later frozen contract and ratified objectives, including endpoint error rate; genuine endpoint errors are outcomes rather than automatic evidence invalidation. A contract evaluator exists in [`qualification.py`](../src/endpoint_bench/qualification.py), but it is exercised only against synthetic evidence and is not a live qualification pipeline. No endpoint has been qualified.
+
+## Interpretation corrections (2026-11-02)
+
+The bounded 8192 multiwindow is read with three corrections, recorded in full in [`docs/qualification/README.md`](qualification/README.md):
+
+1. Its plan declares a 240-second request timeout, while every generated runtime configuration and report records 60 seconds. The runtime value governs the evidence; the plan value is a declared intent that must be asserted at the next release.
+2. Window 1 C=1 is reused evidence from 07:41 UTC; the C=2 pair starts at 07:57 UTC and later windows use ten-minute offsets from it. The design is exploratory and reused, not six uniformly paired fresh windows.
+3. The 8192 cap still censored 7 of 240 responses. That does not establish a universal fixed-cap infeasibility result; the 16384 pilot's 1/20 observation is also a finite sample.
+
+The D0010 same-day session default adds descriptive multi-turn, prefix, reconnect, compaction, idle, tool and context measurements in one foreground invocation: 30 cells / at most 558 model calls, a 600 s cell deadline and a 6 h invocation deadline, with no calendar anchor or scheduled window. The operator contract is [`SESSION_DYNAMICS.md`](SESSION_DYNAMICS.md). The earlier 54-cell temporal program remains a separate, previously executed historical observation; its unstarted W2-W4 and context cells were cancelled rather than converted into same-day repeats. Neither program has thresholds or a qualification verdict, and one same-day observation does not establish day-to-day stability.
