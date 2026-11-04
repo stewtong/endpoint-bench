@@ -1,0 +1,34 @@
+schema_version: "2.0"
+random_seed: 42
+benchmark:
+  model: "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  endpoint:
+    url: "https://api.tokenfactory.nebius.com"
+    type: "chat"
+    streaming: true
+    timeout: 60.0
+    connection_reuse: "pooled"
+    use_server_token_count: true
+    api_key: "${NEBIUS_API_KEY}"
+  datasets:
+    - name: "main"
+      type: "synthetic"
+      entries: 20
+      prompts:
+        isl: 10240
+        osl: 8192
+  phases:
+    type: "concurrency"
+    concurrency: 2
+    requests: 20
+  tokenizer:
+    name: "builtin"
+  gpu_telemetry:
+    enabled: false
+  server_metrics:
+    enabled: false
+  artifacts:
+    dir: "runs/run-2575dfce27f4-w4-c2/aiperf"
+    records: ["jsonl"]
+    raw: true
+    auto_plot: false

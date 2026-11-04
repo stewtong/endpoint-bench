@@ -3,7 +3,7 @@
   "name": "10k-slo-contract",
   "doc_version": "1.1",
   "datestamp": "2026-11-01",
-  "status": "draft_unratified",
+  "status": "draft_unratified_characterization_only",
   "scope": {
     "workload": "synthetic single-turn, 10,240 requested input tokens, 1024-token output ceiling",
     "concurrency_levels": [
@@ -19,7 +19,9 @@
       "multi-provider comparison",
       "reliability over hours or days",
       "any claim about model capability"
-    ]
+    ],
+    "requests_per_window": 20,
+    "windows_prepared": 6
   },
   "design_principle": {
     "statement": "Data-quality gates and performance thresholds are different kinds of statement and must not be derived the same way.",
@@ -165,6 +167,15 @@
         "screening_reference": 0.0,
         "note": "Ratify the tolerated error rate before collecting qualification data. Observed attributable endpoint failures are performance outcomes; they do not invalidate evidence merely by exceeding a threshold. Report count, denominator, attribution, and uncertainty separately for each concurrency level. Zero observed errors does not prove a zero population error rate."
       }
+    ],
+    "ratification_requirements": [
+      "metric and statistic",
+      "unit and inequality",
+      "workload and concurrency level",
+      "client configuration",
+      "deployment and region",
+      "temporal scope and expiry",
+      "origin and date of the requirement"
     ]
   },
   "verdict_logic": {
@@ -191,14 +202,20 @@
       }
     ],
     "current_reachable_state": "inconclusive",
-    "current_reason": "Performance thresholds are unratified. Provider accounting is permitted for delivered-workload performance with explicit provenance; it cannot support tokenizer-equivalence claims."
+    "current_reason": "Performance thresholds are unratified. Provider accounting is permitted for delivered-workload performance with explicit provenance; it cannot support tokenizer-equivalence claims.",
+    "evaluator_implemented": true,
+    "evaluator_scope": "synthetic_evidence_only",
+    "evaluator_note": "`src/endpoint_bench/qualification.py` evaluates contract-shaped evidence and is exercised only against synthetic fixtures in `tests/test_qualification.py`. It is not wired to run reports, has produced no live qualification verdict, and cannot change the current reachable state."
   },
   "aggregation_rules": [
-    "Evaluate each window separately before pooling anything. A window is the unit of evidence.",
-    "Never compute a percentile from fewer than 30 samples. This floor alone does not establish tail precision. Pool only uncensored windows with identical workload and client settings; publish per-window statistics and counts.",
-    "A qualification verdict requires at least three passing windows per concurrency level; one window never qualifies.",
-    "If any window fails a data-quality gate, the whole condition is inconclusive rather than averaging the failure away.",
-    "Report per-window values alongside any pooled statistic so a reader can see the spread the pool hides."
+    "Evaluate each window's evidence validity separately before pooling anything. A window is the unit of evidence validity.",
+    "Pool only eligible per-trial observations from windows with identical workload, client settings, deployment and region. Never pool across data-quality-gate failures.",
+    "Never compute a percentile from fewer than 30 pooled samples. The floor is a guardrail, not proof of tail precision.",
+    "Do not average per-window percentiles. Pool the underlying trials and preserve per-window counts, failures and censoring.",
+    "Publish per-window values beside every pooled statistic so temporal drift remains visible.",
+    "A window that fails a data-quality gate makes the whole condition inconclusive rather than contributing to a pooled average.",
+    "A qualification verdict requires at least three evaluation windows per concurrency level; one window never qualifies.",
+    "Pilot, calibration and exploratory evidence is excluded from qualification evidence permanently, and cannot be relabelled after thresholds are chosen."
   ],
   "invalidation_rules": [
     "A change to deployment key, model revision, region, or base URL invalidates the verdict.",
@@ -230,9 +247,65 @@
     "rejection_reason": "Schema 0.1.0 reports a `sizing_verified` verdict derived from a comparison that was circular under provider accounting, and it has no truncation counter, so it cannot express the censoring this contract depends on."
   },
   "open_questions": [
-    "Whether a visible-answer throughput objective should exist, which would require separating reasoning tokens from content tokens per trial rather than per response.",
-    "Whether three passing windows per level is enough statistical power for a p95 objective, or whether the window count must rise with the percentile being claimed.",
-    "Who ratifies performance thresholds, and what record constitutes ratification."
+    "Whether qualification describes the observed pooled sample or infers a population parameter; this determines sample size and uncertainty reporting.",
+    "How temporal instability between windows should modify a pooled verdict.",
+    "Who ratifies a performance requirement, and what record constitutes ratification.",
+    "Whether a visible-answer throughput objective should exist, which needs reasoning tokens separated from content tokens per trial.",
+    "Whether the intended requirement is a joint success-within-deadline objective rather than separate latency and error objectives."
   ],
-  "implementation_status": "draft_specification_only_no_qualification_evaluator"
+  "implementation_status": "draft_specification_with_synthetic_only_evaluator",
+  "direction": {
+    "current": "characterization",
+    "statement": "Publish measured behavior with scope, validity states, counts and limitations. Qualification stays `inconclusive` because no performance threshold is ratified. Inventing thresholds to exercise the qualification path is prohibited: the pass mark must not come from the measurement it judges.",
+    "meaning_of_each_option": {
+      "operator_requirement": "supports a readiness claim once evidence is adequate",
+      "disjoint_calibration": "supports an identified regression question only, not fitness for a product",
+      "characterization": "describes measured behavior; makes no adequacy claim"
+    }
+  },
+  "evaluation_model": {
+    "problem_this_resolves": "Version 1.0 required three passing windows per concurrency level, set a 30-sample floor for percentiles, and stated p50/p95 objectives, while each window holds 20 requests. A 20-request window cannot support a p50 or p95 objective under this contract's own floor, so as written the requirements were unsatisfiable regardless of endpoint quality.",
+    "unit_of_evidence": "window",
+    "performance_evaluation_sample": "pooled eligible per-trial observations from all windows at the same concurrency level and identical workload, client configuration, deployment and region",
+    "percentile_min_samples_applies_to": "the pooled evaluation sample, not an individual window",
+    "window_role": {
+      "evidence_validity": "every data-quality gate is evaluated per window",
+      "temporal_stability": "per-window statistics are published so drift between windows is visible",
+      "performance_thresholds": "not evaluated per window"
+    },
+    "passing_window_definition": "a window passes when all data-quality gates pass. Passing is a statement about evidence, never about performance.",
+    "bad_window_effect": "the whole concurrency condition is inconclusive; a failing window is not averaged away",
+    "prohibited": [
+      "averaging per-window percentiles to obtain a pooled percentile",
+      "evaluating a percentile objective on a single 20-request window",
+      "lowering the 30-sample floor so an existing plan passes",
+      "choosing pooling or per-window semantics after seeing results"
+    ],
+    "consequence_for_the_prepared_plan": "Six windows provide 120 pooled observations per level, above the 30-sample floor. Four evaluation windows would provide 80. The per-window count stays a validity unit, not a performance unit.",
+    "unresolved": [
+      "whether qualification means descriptive compliance over the observed pooled sample or inference about a population; sample sizes and uncertainty rules follow from that choice",
+      "how per-window temporal instability should affect a pooled verdict"
+    ]
+  },
+  "calibration_use_case": {
+    "question_it_answers": "has this endpoint degraded relative to a frozen baseline?",
+    "question_it_cannot_answer": "is this endpoint fit for a product requirement?",
+    "requirements_before_use": [
+      "identify the calibration population",
+      "state the derivation and tolerance rationale",
+      "declare the calibration windows and exclude them from evaluation evidence",
+      "document the uncertainty policy"
+    ],
+    "note": "Independent calibration is not inherently circular: it answers a regression question, which is narrower than product readiness. Multiplying a measured p95 by a constant and rounding does not supply product justification.",
+    "currently_used": false
+  },
+  "conditional_latency_reporting": {
+    "rule": "Publish latency conditioned on an explicitly stated eligible response population, alongside endpoint error count, rate, attribution and denominator, per window and concurrency level.",
+    "prohibited": [
+      "treating a non-zero endpoint error rate as automatic evidence invalidation",
+      "presenting a latency statistic computed over successful responses as an overall service claim"
+    ],
+    "scope_must_be_derived": "derive the eligible population from actual per-trial records; do not assume the engine summary count equals successful_trials. TTFT observed before a later stream failure may have a different eligible population from natural-completion latency.",
+    "joint_objective_requirement": "if the intended requirement is 'requests complete successfully within a deadline', define that joint objective explicitly rather than implying it from a conditional latency statistic"
+  }
 }

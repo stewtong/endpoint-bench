@@ -112,6 +112,22 @@ jobs:
           '
       - name: Validate the prepared experiment plan and qualification contract
         run: uv run python scripts/check_plan_contract.py
+      - name: Validate the same-day default preflight (zero requests, no anchor)
+        run: |
+          uv run endpoint-bench session same-day --out /tmp/ci-sameday > /tmp/ci-sameday.json
+          uv run python -c '
+          import json
+          m = json.load(open("/tmp/ci-sameday/manifest.json"))
+          p = json.load(open("/tmp/ci-sameday/plan.json"))
+          assert m["totals"]["cells"] == 30 and m["totals"]["max_inference_attempts"] == 558, m["totals"]
+          assert p["totals"]["phases"] == {"session_screening": 27, "context_sentinels": 3}, p["totals"]["phases"]
+          assert m["release"]["live_released_operation_ids"] == []
+          assert m["release"]["release_anchor_utc"] is None
+          assert p["run_mode"]["calendar_anchors"] is False
+          assert all(item["not_before_offset_s"] == 0 for item in p["schedule"] if item["operation_id"])
+          summary = json.load(open("/tmp/ci-sameday.json"))
+          assert summary["inference"]["network_requests"] == 0, summary
+          '
       - name: Validate artifact reprocessing without modifying source evidence
         run: uv run python scripts/check_reprocess.py
 

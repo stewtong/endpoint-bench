@@ -1,4 +1,4 @@
-# 0002 — Architecture and AIPerf 0.13.0 verification
+# 0002: Architecture and AIPerf 0.13.0 verification
 
 **Date:** 2026-11-01
 **Status:** Accepted. Closes Gate 0.
@@ -17,7 +17,7 @@ No paid inference was performed. All experiments ran against a local `127.0.0.1`
 |---|---|
 | Distribution | `aiperf-0.13.0-py3-none-any.whl` (pure-Python wheel) |
 | GitHub tag | `v0.13.0` → `794f8bb75f8582f22e412d7e650fc71ca2a3d21a` |
-| Plan pin | `794f8bb75f8582f22e412d7e650fc71ca2a3d21a` — **matches** |
+| Plan pin | `794f8bb75f8582f22e412d7e650fc71ca2a3d21a` ;  **matches** |
 | Tag commit date | 2026-09-23 |
 | `requires_python` | `>=3.11,<3.14` |
 | Runtime dependencies | 96 distributions |
@@ -50,7 +50,7 @@ Top-level commands present: `analyze`, `analyze-trace`, `chat`, `config`, `kube`
 
 This is the finding that most affects the wrapper design.
 
-**AIPerf 0.13.0 exposes `--api-key`.** A secret passed this way appears in process arguments and therefore in process listings and shell history — the same defect already identified in the historical `run_guidellm.sh`. **The wrapper must never pass `--api-key`.**
+**AIPerf 0.13.0 exposes `--api-key`.** A secret passed this way appears in process arguments and therefore in process listings and shell history ;  the same defect already identified in the historical `run_guidellm.sh`. **The wrapper must never pass `--api-key`.**
 
 Three mechanisms were examined:
 
@@ -67,11 +67,11 @@ Observed evidence for the YAML substitution path:
 - With the variable unset, `aiperf config validate` failed loudly: `Required environment variable 'ENDPOINT_BENCH_OFFLINE_API_KEY' is not set`. This is a fail-closed credential path.
 - `grep` over the entire artifact directory found no occurrence of the secret. AIPerf also applies its own `api_key` redaction on JSON serialization.
 
-`AIPERF_INJECTED_API_KEY`, `AIPERF_INJECTED_HEADERS`, and `AIPERF_INJECTED_ENDPOINT_URLS` are a genuine secret-free transport, but installed source shows they are consumed only by `orchestrator/subprocess_runner.py` and `cli_commands/service.py` — the multi-process and service paths. A plain local `aiperf profile` does not consume them. This is why the direct experiment showed no `Authorization` header.
+`AIPERF_INJECTED_API_KEY`, `AIPERF_INJECTED_HEADERS`, and `AIPERF_INJECTED_ENDPOINT_URLS` are a genuine secret-free transport, but installed source shows they are consumed only by `orchestrator/subprocess_runner.py` and `cli_commands/service.py` ;  the multi-process and service paths. A plain local `aiperf profile` does not consume them. This is why the direct experiment showed no `Authorization` header.
 
 **Decision:** the wrapper writes `api_key: ${<credential_env_name>}` into generated YAML, where `<credential_env_name>` comes from the registry. The secret value exists only in the subprocess environment. No secret appears in source, config, manifests, reports, argv, or artifacts.
 
-## 5. Session affinity and default headers — the plan's specific concern
+## 5. Session affinity and default headers: the plan's specific concern
 
 The plan asks for particular attention to AIPerf's session-affinity behavior and requires a normal-client baseline separate from any affinity-enabled experiment.
 
@@ -105,7 +105,7 @@ AIPERF_HTTP_X_SESSION_AFFINITY_FROM_CORRELATION_ID=false
 
 With that set, `X-Session-Affinity` disappears from the wire while `X-Correlation-ID` remains.
 
-Other affinity headers — `X-Session-ID`, `X-SMG-Routing-Key`, `X-Dynamo-Session-ID` — default to `False` and are opt-in additive.
+Other affinity headers (`X-Session-ID`, `X-SMG-Routing-Key`, `X-Dynamo-Session-ID`) default to `False` and are opt-in additive.
 
 **Decision:** the wrapper always sets `AIPERF_HTTP_X_SESSION_AFFINITY_FROM_CORRELATION_ID` explicitly and records the resulting client profile in the run manifest. It never inherits AIPerf's default silently. Normal-client baseline runs set it to `false`; an affinity experiment sets it to `true` and is labeled as such. `X-Correlation-ID` is always present and must be recorded as part of every client profile, because a provider may treat it as a routing key.
 
@@ -122,10 +122,10 @@ Consequence for the trial model: under AIPerf, one trial corresponds to one HTTP
 | Control | Verified default / options |
 |---|---|
 | `--connection-reuse-strategy` | `pooled` (default), `never`, `sticky-user-sessions` |
-| `--request-timeout-seconds` | **21600 s (6 hours)** — effectively no client timeout |
+| `--request-timeout-seconds` | **21600 s (6 hours)** ;  effectively no client timeout |
 | Load model | closed-loop `--concurrency`; open-loop `--request-rate` + `--request-rate-mode` |
-| `--wait-for-model-mode` | `inference` (default) — sends a real inference request before starting |
-| `--wait-for-model-timeout` | `0.0` (default) — readiness probe skipped when zero |
+| `--wait-for-model-mode` | `inference` (default) ;  sends a real inference request before starting |
+| `--wait-for-model-timeout` | `0.0` (default) ;  readiness probe skipped when zero |
 | Warmup | opt-in via `--warmup-request-count` / `--warmup-duration` |
 
 The 6-hour default timeout is unsuitable for qualification runs and must be set explicitly by every profile.
@@ -173,7 +173,7 @@ Generated files in `--output-artifact-dir`:
 
 ### Summary schema
 
-`profile_export_aiperf.json` carries `schema_version: "1.4"` and `aiperf_version: "0.13.0"`. Every metric is an object with a `unit` plus `avg`, `min`, `max`, `std`, `count`, `sum`, and `p1`–`p99` percentiles. It also carries `benchmark_id`, `run_info.cli_command`, `input_config` (the fully resolved configuration), `is_complete`, `was_cancelled`, `error_summary`, `start_time`, and `end_time`.
+`profile_export_aiperf.json` carries `schema_version: "1.4"` and `aiperf_version: "0.13.0"`. Every metric is an object with a `unit` plus `avg`, `min`, `max`, `std`, `count`, `sum`, and `p1` to `p99` percentiles. It also carries `benchmark_id`, `run_info.cli_command`, `input_config` (the fully resolved configuration), `is_complete`, `was_cancelled`, `error_summary`, `start_time`, and `end_time`.
 
 `schema_version` and `aiperf_version` are both present, so drift detection and unit preservation are straightforward: the parser keys on these and refuses unknown major versions rather than guessing.
 
@@ -181,7 +181,7 @@ Generated files in `--output-artifact-dir`:
 
 `profile_export.jsonl` records contain `metadata` (`session_num`, `x_request_id`, `x_correlation_id`, `conversation_id`, `turn_index`, phase info, `was_cancelled`, `context_overflow_skip`, `root_correlation_id`), `metrics` (value + unit per metric), optionally `payload` and `responses` when raw is enabled, and on failure an `error` object of shape `{type, message, cause}`.
 
-### All-failure behavior — important
+### All-failure behavior: important
 
 **When every request fails, AIPerf exits 1 and does not write the summary export at all.** Observed on a closed port: only `profile_export.jsonl`, `raw_records/*.jsonl`, `inputs.json`, and logs were produced; `profile_export_aiperf.json` was absent. Console reported `All 2 inference request(s) failed; no successful responses were collected.`
 

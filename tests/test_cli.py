@@ -348,6 +348,35 @@ def test_every_run_option_declared_by_code_is_registered_in_the_parser() -> None
 
     assert namespace.token_accounting == "server"
     assert parser.parse_args(["run", "--target", "x", "--dry-run"]).token_accounting == "client"
+    assert (
+        parser.parse_args(
+            ["run", "--target", "x", "--dry-run", "--run-label", "w1-c1"]
+        ).run_label
+        == "w1-c1"
+    )
+    assert parser.parse_args(["run", "--target", "x", "--dry-run"]).run_label is None
+
+
+def test_run_label_distinguishes_repeated_identical_runs() -> None:
+    """A repeated experiment has one config hash; the label keeps identities apart."""
+    from endpoint_bench.cli import _run_id, _validate_run_label
+
+    sha = "a" * 64
+    assert _run_id(sha) == "run-" + "a" * 12
+    assert _run_id(sha, "w1-c1") == "run-" + "a" * 12 + "-w1-c1"
+    assert _run_id(sha, "w1-c1") != _run_id(sha, "w1-c2")
+    assert _validate_run_label("w1-c1") == "w1-c1"
+
+
+@pytest.mark.parametrize(
+    "label", ["", "w1/c1", "../escape", "-leading", "a" * 33, "a b"]
+)
+def test_invalid_run_label_is_rejected(label: str) -> None:
+    from endpoint_bench.aiperf import AiperfError
+    from endpoint_bench.cli import _validate_run_label
+
+    with pytest.raises(AiperfError):
+        _validate_run_label(label)
 
 
 def test_token_accounting_selects_the_server_accounting_client(

@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "name": "qualification-10k-8192",
+  "description": "Exploratory 10K multiwindow cell with an 8192-token output ceiling. The 2048-token pilot censored 7 of 20 responses; a separate 8192-token pilot completed 20 of 20 naturally with lengths of 282-3563 tokens. 8192 is a declared probe value, not a provider-verified output limit, and this profile is outside the 1.1 contract's 1024-token scope. It is exploratory evidence for a future contract revision, not a qualification cell.",
+  "request_count": 20,
+  "input_tokens": 10240,
+  "max_output_tokens": 8192,
+  "concurrency": 1,
+  "streaming": true,
+  "timeout_s": 240,
+  "token_tolerance_pct": 10.0,
+  "qualification": {
+    "status": "provisional",
+    "screening": false,
+    "exploratory": true,
+    "contract": "docs/qualification/10k-slo-contract.json",
+    "note": "Outside the contract's 1024-token scope. This cell cannot qualify an endpoint and its evidence is excluded from the contract's evaluation sample."
+  }
+}

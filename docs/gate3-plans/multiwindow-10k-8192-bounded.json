@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "plan": "multiwindow-10k-8192-bounded",
+  "doc_version": "1.0",
+  "datestamp": "2026-11-01",
+  "status": "completed_bounded",
+  "execution": {
+    "completed_at_utc": "2026-11-02T08:56:13Z",
+    "cells_executed": 12,
+    "requests": 240,
+    "natural_completions": 233,
+    "ceiling_truncated": 7,
+    "endpoint_failures": 0,
+    "analysis": "docs/gate3-multiwindow-8192-bounded/analysis.json",
+    "results_document": "docs/GATE3_MULTIWINDOW_8192_BOUNDED_RESULTS.md",
+    "note": "All 12 cells passed their evidence checks. Censoring was recorded and analyzed as per-trial lower bounds; no cell was dropped or retried."
+  },
+  "identity": {
+    "distinct_from": [
+      "multiwindow-10k-8192",
+      "multiwindow-10k-c1-c2",
+      "pilot-10k-8192",
+      "pilot-10k-16384"
+    ],
+    "reason": "Same workload settings as multiwindow-10k-8192, but a different stop rule and analysis: censoring is recorded as per-trial lower bounds instead of aborting the experiment. The first C=1 cell is reused from the stopped plan because its settings are identical; the remaining 11 cells are new."
+  },
+  "purpose": "bounded_multiwindow_characterization_not_qualification",
+  "methodology": {
+    "problem": "The 2048, 8192, and 16384 pilots all show a reasoning-only ceiling tail. Zero censoring in 240 trials is not a feasible design at a 5% rate, so the zero-censoring stop rule blocks the benchmark rather than protecting it.",
+    "bounded_analysis": "A ceiling-truncated trial contributes its cap-hit time as a per-trial lower bound on completion latency. Every order statistic of the lower bounds is a lower bound on the corresponding order statistic of the true completion times. A lower bound above an upper-bound threshold proves failure; a lower bound below it stays inconclusive. No threshold is ratified, so the analysis is descriptive.",
+    "implementation": "src/endpoint_bench/bounds.py, tested by tests/test_bounds.py; scripts/analyze_bounded.py pools the 12 cells.",
+    "outside_contract": "The 1.1 contract's dq.truncation_rate gate still treats any censoring as invalid. This experiment is outside that gate and outside the 1024-token contract scope. It produces bounded descriptive evidence, not a contract verdict."
+  },
+  "authorization": {
+    "execution_authorized": true,
+    "authorized_by": "Owner session goal: \"Complete all performance benchmarks\"",
+    "authorized_at_utc": "2026-11-02T07:56:58Z",
+    "scope": "The remaining 11 cells of a six-window, two-cell 10K experiment at an 8192-token ceiling, plus the reused C=1 cell from run-6cabf9e5ee70-w1-c1. Censoring is allowed and analyzed as lower bounds.",
+    "note": "This authorization covers only this bounded experiment. It does not authorize a higher ceiling, a different deployment, a contract verdict, or a qualification claim."
+  },
+  "reused_cell": {
+    "run": "run-6cabf9e5ee70-w1-c1",
+    "window": 1,
+    "concurrency": 1,
+    "settings_identical": true,
+    "observed": "18 natural, 2 censored at 8192"
+  },
+  "design": {
+    "windows": 6,
+    "cells_per_window": 2,
+    "requests_per_cell": 20,
+    "total_trials": 240,
+    "new_trials": 220,
+    "interleaving": "Odd windows run C=1 first, even windows run C=2 first. Window 1's C=1 cell is the reused run; its C=2 cell and windows 2-6 are new.",
+    "client_profile": "baseline-normal-client-server-accounting",
+    "client_settings": {
+      "session_affinity": false,
+      "automatic_retries": false,
+      "connection_reuse": "pooled",
+      "token_accounting": "provider_usage",
+      "random_seed": 42
+    },
+    "requested_input_tokens": 10240,
+    "output_ceiling_per_request": 8192,
+    "request_timeout_s": 240.0,
+    "process_timeout_s_per_cell": 2400.0,
+    "window_start_offsets_minutes": [
+      0,
+      10,
+      20,
+      30,
+      40,
+      50
+    ],
+    "estimated_wall_time_minutes": 60,
+    "wall_time_basis": "The 8192 pilot took 58 s and the censored cell 87 s. Ten-minute offsets leave room for provider variance; if a pair overruns the next offset, stop and revise rather than overlap."
+  },
+  "pricing_basis": {
+    "source": "https://tokenfactory.nebius.com/models (rendered catalog)",
+    "effective_date": "2026-11-01",
+    "prompt_per_million_tokens": 0.3,
+    "completion_per_million_tokens": 1.2,
+    "verified": true,
+    "safety_multiplier": 1.5
+  },
+  "cost": {
+    "estimator": "endpoint_bench.cost.estimate_cost_usd",
+    "per_cell_estimate_usd": 0.387072,
+    "total_estimate_usd": 4.644864,
+    "per_cell_max_usd_ceiling": 0.45,
+    "total_max_usd_ceilings": 5.4,
+    "new_cells_only_estimate_usd": 4.257792,
+    "note": "Client-side conservative bound assuming every request reaches the 8192 cap. Actual spend is expected to be far lower. Not a provider billing limit."
+  },
+  "stop_rules": {
+    "evaluate_after_each_cell": true,
+    "criterion": "Censoring is not a stop condition. It is recorded and analyzed as a lower bound. The experiment stops only when the evidence itself is invalid.",
+    "stop_sequence_on": [
+      "a harness failure, nonzero engine exit without parseable evidence, or process timeout",
+      "planned requests not equal to actual HTTP attempts",
+      "a provider-versus-target conformance failure outside the profile tolerance",
+      "missing validated engine schema or raw evidence",
+      "a cost guard refusal",
+      "a cell overrunning the next window offset"
+    ],
+    "on_failure": "Stop the sequence, preserve artifacts, and do not retry, replace trials, raise the ceiling, or merge cells with different settings. Review and version a new plan.",
+    "prohibited": [
+      "retrying a cell",
+      "replacing a trial",
+      "raising the output ceiling to reduce censoring",
+      "dropping censored trials from the pooled sample",
+      "claiming a completion-latency mean or percentile as exact rather than bounded",
+      "merging this experiment with the stopped plan's uncensored interpretation"
+    ]
+  },
+  "analysis": {
+    "command": "uv run python scripts/analyze_bounded.py --run 1:<cell> ...",
+    "pooling": "Pool per-trial lower bounds at each concurrency level across all six windows. Publish per-window counts beside the pooled bounds.",
+    "estimator": "linear_interpolation_of_closest_ranks for p50/p95; arithmetic mean for mean",
+    "censoring_rule": "Never drop a censored trial. Never compute a natural-completion-only mean or percentile and present it as the sample's latency.",
+    "interpretation": "The pooled p50/p95 are lower bounds. They can prove an upper-bound objective is missed; they cannot prove one is met. Thresholds remain null."
+  },
+  "qualification": {
+    "status": "not_applicable",
+    "note": "Outside the 1.1 contract's 1024-token scope and zero-censoring gate. No verdict is produced and no endpoint is qualified."
+  }
+}

@@ -35,3 +35,10 @@ traces/
 .codex/
 .idea/
 .vscode/
+
+# Local editorial backups
+temp/
+
+# Curated public measurements; raw run directories remain ignored.
+!docs/results/
+!docs/results/**

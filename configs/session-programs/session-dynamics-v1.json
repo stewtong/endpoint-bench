@@ -1,0 +1,630 @@
+{
+  "schema_version": "1.0",
+  "program_id": "session-dynamics-v1",
+  "directive_id": "D0003",
+  "state": "IMPLEMENTATION_AND_OFFLINE_PREFLIGHT",
+  "created_at_utc": "2026-11-02T15:35:56.412882+00:00",
+  "target": "tf-deepseek-v4.1-flash-1017",
+  "purpose": "performance_and_reliability_characterization",
+  "qualification_thresholds": null,
+  "pricing_objective": false,
+  "pricing_policy": "No pricing research or budget-approval loop required; preserve token usage. Existing mandatory CLI safety preflight remains functional. No pricing-based ranking.",
+  "live_released_operation_ids": [],
+  "limits": {
+    "max_total_new_inference_attempts": 1038,
+    "max_concurrent_sessions": 4,
+    "max_total_inflight_model_calls": 4,
+    "max_completion_tokens_per_call": 8192,
+    "session_input_tokens_initial_target": 10240,
+    "session_input_tokens_max": 32768,
+    "context_input_tokens_max": 131072,
+    "request_timeout_s": 240,
+    "cell_process_deadline_s": 2400,
+    "max_active_execution_hours": 36,
+    "max_program_elapsed_hours": 48,
+    "automatic_inference_retries": 0,
+    "replacement_trials": 0,
+    "unlisted_warmup_or_readiness_inference": 0
+  },
+  "scenarios": [
+    {
+      "id": "independent",
+      "description": "Four independent prompts per group; no shared prefix across groups. Baseline at matched input lengths."
+    },
+    {
+      "id": "stable_prefix",
+      "description": "Four independent turns sharing a stable synthetic prefix within a group; change only matched-size suffixes. First turn is measured, not hidden warmup."
+    },
+    {
+      "id": "prefix_invalidation",
+      "description": "Matched stable-prefix sequence with an early prefix change on turns 3-4. Keep lengths and suffix tasks matched to stable_prefix."
+    },
+    {
+      "id": "growing_transcript",
+      "description": "Four dependent turns retaining real assistant replies, explicit transcript append and bounded input growth; no implicit compaction."
+    },
+    {
+      "id": "interleaved_sessions",
+      "description": "Same four-turn dependent sessions, round-robin scheduling across five sessions; retain per-session order and no cross-session history."
+    },
+    {
+      "id": "client_reconnect",
+      "description": "Matched growing session with a new client connection between turns 2 and 3, same logical transcript. This does not assert a server cache reset."
+    },
+    {
+      "id": "explicit_compaction",
+      "description": "Matched growing transcript, with deterministic local compaction before turn 3. Preserve designated sentinel facts; record original and compacted token sizes. No model call for compaction."
+    },
+    {
+      "id": "idle_resume",
+      "description": "Matched session with a 60-second pause before turn 3. Report idle gap separately from active and end-to-end elapsed time; deterministic finite scheduling."
+    },
+    {
+      "id": "tool_roundtrip",
+      "description": "Four model calls per session with deterministic in-process tools and real tool-result continuation. Count every model call; do not execute model-supplied shell/network actions. Unsupported tools are recorded as unsupported, never substituted silently."
+    }
+  ],
+  "operations": [
+    {
+      "operation_id": "SD-independent-C1",
+      "phase": "session_screening",
+      "scenario": "independent",
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-independent-C2",
+      "phase": "session_screening",
+      "scenario": "independent",
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-independent-C4",
+      "phase": "session_screening",
+      "scenario": "independent",
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-stable_prefix-C1",
+      "phase": "session_screening",
+      "scenario": "stable_prefix",
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-stable_prefix-C2",
+      "phase": "session_screening",
+      "scenario": "stable_prefix",
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-stable_prefix-C4",
+      "phase": "session_screening",
+      "scenario": "stable_prefix",
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-prefix_invalidation-C1",
+      "phase": "session_screening",
+      "scenario": "prefix_invalidation",
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-prefix_invalidation-C2",
+      "phase": "session_screening",
+      "scenario": "prefix_invalidation",
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-prefix_invalidation-C4",
+      "phase": "session_screening",
+      "scenario": "prefix_invalidation",
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-growing_transcript-C1",
+      "phase": "session_screening",
+      "scenario": "growing_transcript",
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-growing_transcript-C2",
+      "phase": "session_screening",
+      "scenario": "growing_transcript",
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-growing_transcript-C4",
+      "phase": "session_screening",
+      "scenario": "growing_transcript",
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-interleaved_sessions-C1",
+      "phase": "session_screening",
+      "scenario": "interleaved_sessions",
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-interleaved_sessions-C2",
+      "phase": "session_screening",
+      "scenario": "interleaved_sessions",
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-interleaved_sessions-C4",
+      "phase": "session_screening",
+      "scenario": "interleaved_sessions",
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-client_reconnect-C1",
+      "phase": "session_screening",
+      "scenario": "client_reconnect",
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-client_reconnect-C2",
+      "phase": "session_screening",
+      "scenario": "client_reconnect",
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-client_reconnect-C4",
+      "phase": "session_screening",
+      "scenario": "client_reconnect",
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-explicit_compaction-C1",
+      "phase": "session_screening",
+      "scenario": "explicit_compaction",
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-explicit_compaction-C2",
+      "phase": "session_screening",
+      "scenario": "explicit_compaction",
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-explicit_compaction-C4",
+      "phase": "session_screening",
+      "scenario": "explicit_compaction",
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-idle_resume-C1",
+      "phase": "session_screening",
+      "scenario": "idle_resume",
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-idle_resume-C2",
+      "phase": "session_screening",
+      "scenario": "idle_resume",
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-idle_resume-C4",
+      "phase": "session_screening",
+      "scenario": "idle_resume",
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-tool_roundtrip-C1",
+      "phase": "session_screening",
+      "scenario": "tool_roundtrip",
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-tool_roundtrip-C2",
+      "phase": "session_screening",
+      "scenario": "tool_roundtrip",
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "SD-tool_roundtrip-C4",
+      "phase": "session_screening",
+      "scenario": "tool_roundtrip",
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W1-growing_transcript-C1",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 1,
+      "start_offset_hours": 0,
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W1-growing_transcript-C2",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 1,
+      "start_offset_hours": 0,
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W1-growing_transcript-C4",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 1,
+      "start_offset_hours": 0,
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W1-interleaved_sessions-C1",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 1,
+      "start_offset_hours": 0,
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W1-interleaved_sessions-C2",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 1,
+      "start_offset_hours": 0,
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W1-interleaved_sessions-C4",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 1,
+      "start_offset_hours": 0,
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W2-growing_transcript-C1",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 2,
+      "start_offset_hours": 6,
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W2-growing_transcript-C2",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 2,
+      "start_offset_hours": 6,
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W2-growing_transcript-C4",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 2,
+      "start_offset_hours": 6,
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W2-interleaved_sessions-C1",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 2,
+      "start_offset_hours": 6,
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W2-interleaved_sessions-C2",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 2,
+      "start_offset_hours": 6,
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W2-interleaved_sessions-C4",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 2,
+      "start_offset_hours": 6,
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W3-growing_transcript-C1",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 3,
+      "start_offset_hours": 24,
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W3-growing_transcript-C2",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 3,
+      "start_offset_hours": 24,
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W3-growing_transcript-C4",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 3,
+      "start_offset_hours": 24,
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W3-interleaved_sessions-C1",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 3,
+      "start_offset_hours": 24,
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W3-interleaved_sessions-C2",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 3,
+      "start_offset_hours": 24,
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W3-interleaved_sessions-C4",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 3,
+      "start_offset_hours": 24,
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W4-growing_transcript-C1",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 4,
+      "start_offset_hours": 30,
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W4-growing_transcript-C2",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 4,
+      "start_offset_hours": 30,
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W4-growing_transcript-C4",
+      "phase": "temporal_repeats",
+      "scenario": "growing_transcript",
+      "window": 4,
+      "start_offset_hours": 30,
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W4-interleaved_sessions-C1",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 4,
+      "start_offset_hours": 30,
+      "concurrent_sessions": 1,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W4-interleaved_sessions-C2",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 4,
+      "start_offset_hours": 30,
+      "concurrent_sessions": 2,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "TR-W4-interleaved_sessions-C4",
+      "phase": "temporal_repeats",
+      "scenario": "interleaved_sessions",
+      "window": 4,
+      "start_offset_hours": 30,
+      "concurrent_sessions": 4,
+      "sessions": 5,
+      "model_calls_per_session": 4,
+      "max_inference_attempts": 20
+    },
+    {
+      "operation_id": "CTX-32768-C1",
+      "phase": "context_sentinels",
+      "scenario": "context_sentinels",
+      "concurrent_sessions": 1,
+      "requested_input_tokens": 32768,
+      "sentinel_positions": [
+        "early",
+        "middle",
+        "late"
+      ],
+      "replicates_per_position": 2,
+      "max_inference_attempts": 6
+    },
+    {
+      "operation_id": "CTX-65536-C1",
+      "phase": "context_sentinels",
+      "scenario": "context_sentinels",
+      "concurrent_sessions": 1,
+      "requested_input_tokens": 65536,
+      "sentinel_positions": [
+        "early",
+        "middle",
+        "late"
+      ],
+      "replicates_per_position": 2,
+      "max_inference_attempts": 6
+    },
+    {
+      "operation_id": "CTX-131072-C1",
+      "phase": "context_sentinels",
+      "scenario": "context_sentinels",
+      "concurrent_sessions": 1,
+      "requested_input_tokens": 131072,
+      "sentinel_positions": [
+        "early",
+        "middle",
+        "late"
+      ],
+      "replicates_per_position": 2,
+      "max_inference_attempts": 6
+    }
+  ],
+  "execution_policy": {
+    "manager_review_before_live": true,
+    "readiness": "Claim executor; complete offline fixes; freeze actual manifest, supported argv and source/workload hashes; submit AWAITING_REVIEW. Owner approval is recorded; do not ask same scope/pricing again.",
+    "concurrency": "At most one active cell; within it C counts simultaneous sessions, one outstanding model call per session. Publish achieved request concurrency.",
+    "ordering": "Seed and freeze balanced random order within phase/window, honoring cache-treatment setup and dependencies. Do not reorder based on observed speed.",
+    "identity": "Scenario, template, seed, group, session, turn, request, source/config/model/region/reasoning/affinity/connection settings must be explicit. Repeated logical template is not repeated trial identity.",
+    "stop": "Stop on invalid evidence, exceeded limits, manifest drift, secret leak, cancellation or provider rate-limit exhaustion; preserve partial results. A genuine endpoint error remains an outcome. No retry/replacement. No output-cap escalation.",
+    "censoring": "Record censoring as a measured session/workload outcome; preserve latency bounds and all denominators. It is not an automatic abort for this newly defined descriptive program. Unknown finish metadata invalidates evidence.",
+    "qualification": "No endpoint-qualified or universal capacity/fixed-cap feasibility claim. Only empirical finite-sample characterization; no invented SLOs.",
+    "time": "Temporal anchor chosen only when released; scheduled windows never overlap. Record delays/misses; do not backfill. No new persistent OS/app scheduler.",
+    "conditional_scope": "C8, offered-rate/sustained capacity tests, larger than131072 input, higher output cap, other deployments and affinity-on experiments are follow-on plans only, not released by this manifest."
+  }
+}

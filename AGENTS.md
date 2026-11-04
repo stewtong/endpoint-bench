@@ -1,7 +1,7 @@
-# Agent instructions — Agent Endpoint Bench
+# Agent instructions: Agent Endpoint Bench
 
-**Version:** 0.5.3
-**Datestamp:** 2026-11-01
+**Version:** 0.5.4
+**Datestamp:** 2026-11-02
 **Source:** Canonical endpoint benchmark architecture, historical Token Factory evidence, AIPerf 0.13.0 inspection, AA documentation, and the v0.5 public-readiness audit.
 **Update rule:** Keep these instructions aligned with `BENCHMARK_PLAN.md` and `IMPLEMENTATION_TASKS.md`. Preserve historical evidence and methodology history separately.
 
@@ -64,6 +64,21 @@ These were established by verified evidence in `docs/decisions/0002-architecture
 8. Token counts are recorded in four distinct measures (target, client-estimated, provider-reported, observed output). Never apply a correction factor. Record which measure is the accounting source, and state when provider accounting is in use that independent client tokenization is absent; provider-versus-target conformance is a separate check. Unverified sizing blocks requested-size and long-context claims. Preserve provider-token throughput for the workload actually delivered, with provenance; client-tokenized throughput requires independent agreement.
 9. Local unattended execution is restricted to explicit numeric loopback addresses on an explicit port. Hostname resolution is not trusted, proxies are stripped, and redirects are refused.
 10. Workload kinds are labelled and not interchangeable. Recorded replay is never described as live agent execution, and conformance probes never imply intelligence scoring.
+
+## Session-dynamics invariants
+
+These apply to `session-dynamics-v1` and any later session program. They are enforced by `tests/test_session_engine.py` and `tests/test_session_evidence.py`.
+
+1. A dependent turn appends the **real** assistant reply. Never flatten a conversation to independent prompts or invent a reply for a truncated/censored turn.
+2. One outstanding call per session; C counts concurrent sessions and total in-flight calls never exceeds the program limit. Publish achieved concurrency, not just declared C.
+3. A session turn whose client-estimated or provider-reported input exceeds the declared bound is marked ineligible and stopped. Never trim, switch profile, or issue a replacement call.
+4. First-visible-content timing is measured from the stream. It is never inferred from aggregate TTFT or from the first reasoning token.
+5. No hidden warmup. The first turn is measured. Cache group ids are explicit, unique across cells/windows, and affinity stays disabled.
+6. Provider cache telemetry, timing-inferred benefit, and unknown state are separate. This design does not attribute a cache benefit.
+7. Tools are fixed in-process functions over synthetic fixtures. Never execute a model-supplied shell, filesystem or network action; an unsupported tool is an observed outcome.
+8. Retries and replacement trials are zero. Endpoint failures remain counted outcomes.
+9. The journal is written before each request. Resume runs only unstarted operations; a started but unfinished operation is `interrupted` and never replayed.
+10. Missing provider telemetry is `null`, never zero. Every report publishes planned, attempted, successful, truncated, failed and skipped/ineligible denominators.
 
 ## Before each implementation task
 

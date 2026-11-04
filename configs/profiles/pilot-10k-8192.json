@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "name": "pilot-10k-8192",
+  "description": "Exploratory ceiling probe: 10,240 requested input tokens with an 8192-token output ceiling. The 2048-token pilot censored 7 of 20 responses, all reasoning-only; this cell asks whether that subpopulation terminates by 8192. 8192 is a declared probe value, not a provider-verified output limit. A clean result does not certify the ceiling and does not authorize a multiwindow run.",
+  "request_count": 20,
+  "input_tokens": 10240,
+  "max_output_tokens": 8192,
+  "concurrency": 1,
+  "streaming": true,
+  "timeout_s": 240,
+  "token_tolerance_pct": 10.0,
+  "qualification": {
+    "status": "provisional",
+    "screening": false,
+    "exploratory": true,
+    "contract": "docs/qualification/10k-slo-contract.json",
+    "note": "Exploratory ceiling evidence only. It is excluded from future qualification evidence and cannot qualify an endpoint."
+  }
+}

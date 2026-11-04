@@ -1,8 +1,8 @@
-# Agent Endpoint Bench — Endpoint Readiness and Performance Plan
+# Agent Endpoint Bench: Endpoint Readiness and Performance Plan
 
-**Version:** 0.5.3
-**Datestamp:** 2026-11-01  
-**Status:** Approved v0.5 specification. The software is v0.1.2 (benchmark MVP) and implements offline registry validation, dry-run manifests, normalized trial evidence with per-metric validity, deterministic streaming and tool-call conformance probes, a pinned AIPerf 0.13.0 wrapper, agent-shaped trace replay, and reporting. Six screening cells and a live tool-call continuation have been executed against one deployment; that evidence is single-window screening. No endpoint is qualified, and no qualification threshold is calibrated.
+**Version:** 0.5.5
+**Datestamp:** 2026-11-03
+**Status:** Approved v0.5 specification. The software is v0.1.3 and implements offline registry validation, dry-run manifests, normalized trial evidence with per-metric validity, deterministic streaming and tool-call conformance probes, a pinned AIPerf 0.13.0 wrapper, agent-shaped trace replay, reporting, and two versioned session-dynamics programs. The D0010 default is `session-dynamics-sameday-v1`: one foreground invocation, 30 cells / at most 558 model calls, nine live-turn scenarios at C=1/2/4 plus three context sentinels, with no calendar anchor or scheduled window. The D0003/D0009 54-cell temporal program is preserved as an executed historical observation. Neither program is live-released in the repository and neither has thresholds. Six screening cells and a live tool-call continuation have been executed against one deployment; that evidence is single-window screening. No endpoint is qualified, and no qualification threshold is calibrated.
 **Source:** `AGENTS.md`, historical Token Factory/OpenClaw evidence, repository inspection, AIPerf 0.13.0, AA documentation, and the v0.5 public-readiness audit.
 **Update rule:** Keep this canonical. Re-verify AIPerf, AA, endpoints, revisions, limits, pricing, reasoning, and cache behavior before execution. Preserve history separately.
 
@@ -161,7 +161,7 @@ Before paid execution:
 - stop when the configured local budget threshold is reached;
 - reject unattended execution when cost cannot be conservatively bounded.
 
-Unknown pricing is acceptable for registry validation, offline tests, dry-run manifests, synthetic fixtures, and configuration inspection when represented explicitly as `null`/unknown rather than zero. It blocks unattended live execution unless a dated provider-specific price source and a conservative exposure estimate—covering output limits, reasoning behavior, retries, and request count—support a bound. Unknown pricing must not silently become zero. A true hard monetary ceiling may be claimed only when provider-side enforcement supports it. Maintain default-off execution posture; no paid inference starts without explicit authorization.
+Unknown pricing is acceptable for registry validation, offline tests, dry-run manifests, synthetic fixtures, and configuration inspection when represented explicitly as `null`/unknown rather than zero. It blocks unattended live execution unless a dated provider-specific price source and a conservative exposure estimate support a bound covering output limits, reasoning behavior, retries, and request count. Unknown pricing must not silently become zero. A true hard monetary ceiling may be claimed only when provider-side enforcement supports it. Maintain default-off execution posture; no paid inference starts without explicit authorization.
 
 ## 8. Measurement and statistical validity
 
@@ -218,6 +218,10 @@ Evaluate:
 - controlled warm-versus-cold comparisons where possible.
 
 Distinguish provider-reported cached tokens, cache-hit inference from timing, measured latency improvement, measured cost improvement, and unknown cache state. Do not infer cache correctness from low TTFT alone. A client restart does not prove server cold start. Record cache-affecting headers, provider settings, timing, and session-affinity behavior. Preserve separate findings for cache availability, effectiveness, and retention.
+
+### Session-dynamics-v1 adapter
+
+D0010 implements this workload family as the default finite program: nine scenarios, C=1/2/4, five sessions of four calls per cell, and 32K/64K/128K context sentinels in one foreground invocation (30 cells / 558 maximum calls). The D0003/D0009 temporal variant added four windows and is preserved as a historical observation. The live-turn path is used because AIPerf 0.13.0's `multi_turn` dataset carries pre-recorded history and trace replay carries timestamps; neither appends a live assistant reply. The adapter decision and verified AIPerf capabilities are recorded in [`docs/decisions/0004-session-dynamics-adapter.md`](docs/decisions/0004-session-dynamics-adapter.md). The suite has no thresholds, no qualification verdict, and no live release. Client reconnect changes a connection, not a proven provider cache state.
 
 ## 11. Artificial Analysis reference integration
 

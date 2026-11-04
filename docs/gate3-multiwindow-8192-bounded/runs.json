@@ -1,0 +1,203 @@
+{
+  "reused": "run-6cabf9e5ee70-w1-c1",
+  "executed": [
+    {
+      "label": "w1-c2",
+      "concurrency": 2,
+      "run_id": "run-2575dfce27f4-w1-c2",
+      "run_dir": "run-2575dfce27f4-w1-c2",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 20,
+        "transport_completed_trials": 20,
+        "truncated_trials": 0
+      }
+    },
+    {
+      "label": "w2-c2",
+      "concurrency": 2,
+      "run_id": "run-2575dfce27f4-w2-c2",
+      "run_dir": "run-2575dfce27f4-w2-c2",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 20,
+        "transport_completed_trials": 20,
+        "truncated_trials": 0
+      }
+    },
+    {
+      "label": "w2-c1",
+      "concurrency": 1,
+      "run_id": "run-6cabf9e5ee70-w2-c1",
+      "run_dir": "run-6cabf9e5ee70-w2-c1",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 20,
+        "transport_completed_trials": 20,
+        "truncated_trials": 0
+      }
+    },
+    {
+      "label": "w3-c1",
+      "concurrency": 1,
+      "run_id": "run-6cabf9e5ee70-w3-c1",
+      "run_dir": "run-6cabf9e5ee70-w3-c1",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 19,
+        "transport_completed_trials": 20,
+        "truncated_trials": 1
+      }
+    },
+    {
+      "label": "w3-c2",
+      "concurrency": 2,
+      "run_id": "run-2575dfce27f4-w3-c2",
+      "run_dir": "run-2575dfce27f4-w3-c2",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 20,
+        "transport_completed_trials": 20,
+        "truncated_trials": 0
+      }
+    },
+    {
+      "label": "w4-c2",
+      "concurrency": 2,
+      "run_id": "run-2575dfce27f4-w4-c2",
+      "run_dir": "run-2575dfce27f4-w4-c2",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 18,
+        "transport_completed_trials": 20,
+        "truncated_trials": 2
+      }
+    },
+    {
+      "label": "w4-c1",
+      "concurrency": 1,
+      "run_id": "run-6cabf9e5ee70-w4-c1",
+      "run_dir": "run-6cabf9e5ee70-w4-c1",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 19,
+        "transport_completed_trials": 20,
+        "truncated_trials": 1
+      }
+    },
+    {
+      "label": "w5-c1",
+      "concurrency": 1,
+      "run_id": "run-6cabf9e5ee70-w5-c1",
+      "run_dir": "run-6cabf9e5ee70-w5-c1",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 19,
+        "transport_completed_trials": 20,
+        "truncated_trials": 1
+      }
+    },
+    {
+      "label": "w5-c2",
+      "concurrency": 2,
+      "run_id": "run-2575dfce27f4-w5-c2",
+      "run_dir": "run-2575dfce27f4-w5-c2",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 20,
+        "transport_completed_trials": 20,
+        "truncated_trials": 0
+      }
+    },
+    {
+      "label": "w6-c2",
+      "concurrency": 2,
+      "run_id": "run-2575dfce27f4-w6-c2",
+      "run_dir": "run-2575dfce27f4-w6-c2",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 20,
+        "transport_completed_trials": 20,
+        "truncated_trials": 0
+      }
+    },
+    {
+      "label": "w6-c1",
+      "concurrency": 1,
+      "run_id": "run-6cabf9e5ee70-w6-c1",
+      "run_dir": "run-6cabf9e5ee70-w6-c1",
+      "counters": {
+        "cancelled_trials": 0,
+        "failed_trials": 0,
+        "http_attempts": 20,
+        "planned_trials": 20,
+        "protocol_completed_trials": 20,
+        "skipped_trials": 0,
+        "started_trials": 20,
+        "successful_trials": 20,
+        "transport_completed_trials": 20,
+        "truncated_trials": 0
+      }
+    }
+  ]
+}

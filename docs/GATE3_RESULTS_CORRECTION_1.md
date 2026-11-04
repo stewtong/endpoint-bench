@@ -4,6 +4,7 @@
 **Datestamp:** 2026-11-01
 **Source:** reprocessing of the six original screening run directories under `~/.endpoint-bench/screening/` from their unmodified AIPerf artifacts; harness version 0.1.0 at commit `1dcd558` plus the correction patch described below.
 **Supersedes:** specific fields of [`GATE3_RESULTS.md`](GATE3_RESULTS.md). That document is retained unmodified as the record of what was published at the time.
+**Superseded in part by:** [`GATE3_RESULTS_CORRECTION_2.md`](GATE3_RESULTS_CORRECTION_2.md), which adds validation guardrails and promotes censored latency to its own validity state. Every numerical finding below still stands. This document is retained unmodified apart from this pointer and the one row marked below, because a correction that edits itself is not a record.
 **Update rule:** This correction is closed. Any further change to these cells requires a new numbered correction, not an edit to this one.
 
 ## Why this exists
@@ -12,15 +13,15 @@ Reprocessing the six screening runs from their original raw artifacts found thre
 
 | Original claim | Status after correction |
 |---|---|
-| Provider-reported input averaged 1–4% above the profile target | **Holds.** Measured 1.16%, 1.34%, 3.99%. |
+| Provider-reported input averaged 1 to 4% above the profile target | **Holds.** Measured 1.16%, 1.34%, 3.99%. |
 | Workload sizing was verified, so token-normalized metrics are valid | **Holds, for a different reason than stated.** The original check compared the provider count against itself and was therefore circular. Provider-versus-target conformance now verifies it independently. |
 | 120 planned trials, 120 successful, 0 failures | **Wrong.** 3 trials completed naturally. **117 of 120 hit the 256-token output ceiling** and were recorded as clean successes. |
 | Zero truncations | **Wrong.** 117 truncations. |
 | All requests terminated `completed` | **Misleading.** HTTP and protocol completion were real; *response* completion was not. |
-| Output throughput figures | **Narrower than published.** 87–100% of the completion tokens were provider-reported reasoning tokens. Those figures are reasoning-emission rates, not answer-generation rates. |
+| Output throughput figures | **Narrower than published.** 87 to 100% of the completion tokens were provider-reported reasoning tokens. Those figures are reasoning-emission rates, not answer-generation rates. |
 | The 10K TTFT inversion cannot be attributed | **Holds, and is unaffected** by this correction. TTFT is measured on the first token, before any ceiling applies. |
 
-## Defect 1 — token sizing under provider accounting was circular
+## Defect 1: token sizing under provider accounting was circular
 
 Under `--token-accounting server`, AIPerf sets `input_sequence_length` from the provider's `usage.prompt_tokens`. The harness read that field as a *client estimate* and compared it with `usage_prompt_tokens`. Both sides were the same number, so `discrepancy_pct` was always exactly `0.0` and `sizing_verified` was always `true`, regardless of what the provider actually received.
 
@@ -33,16 +34,16 @@ discrepancy_pct               = 0.0
 sizing_verified               = true
 ```
 
-The conclusion happened to be true — the provider did see the requested workload — but it was true by construction, not by measurement. A run that delivered the wrong payload would have passed the same check.
+The conclusion happened to be true (the provider did see the requested workload) but it was true by construction, not by measurement. A run that delivered the wrong payload would have passed the same check.
 
 **Correction.** Two independent verdicts are now computed and both are always published:
 
-- `provider_vs_target` — did the provider see the input size the profile requested? Available in both accounting modes.
-- `client_vs_provider` — does an independent client tokenizer agree with the provider? `not_observed` under provider accounting, because no client tokenizer ran. It is never back-filled from a provider-sourced metric.
+- `provider_vs_target` ;  did the provider see the input size the profile requested? Available in both accounting modes.
+- `client_vs_provider` ;  does an independent client tokenizer agree with the provider? `not_observed` under provider accounting, because no client tokenizer ran. It is never back-filled from a provider-sourced metric.
 
 The authoritative check is `client_vs_provider` under client accounting and `provider_vs_target` under provider accounting. `sizing_verified` is derived from that check only. `TokenAccounting` now raises at construction if a client estimate is attached under provider accounting, so the defect cannot be reintroduced by a caller.
 
-## Defect 2 — every protocol-completed response was scored `success`
+## Defect 2: every protocol-completed response was scored `success`
 
 The harness classified a trial by whether AIPerf emitted a record without an `error` object. It never read `finish_reason`, and `finish_reason` was `null` in every one of the 120 stored trial records. In the raw streams, 117 responses ended with `finish_reason: "length"` against our own `max_completion_tokens: 256`.
 
@@ -52,7 +53,7 @@ Those trials were not endpoint failures. They were capped by the benchmark's own
 
 | Condition | Outcome | Attribution |
 |---|---|---|
-| 2xx, natural finish reason (`stop`, `end_turn`, `tool_calls`, …) | `success` | — |
+| 2xx, natural finish reason (`stop`, `end_turn`, `tool_calls`, …) | `success` | ;  |
 | 2xx, `length` / `max_tokens` | `output_truncated` | `harness` (our ceiling) |
 | 2xx, content-policy stop | `protocol_failure` | `provider` |
 | 2xx, stream ended with no terminal reason | `stream_interrupted` | `provider` |
@@ -64,7 +65,7 @@ Those trials were not endpoint failures. They were capped by the benchmark's own
 
 A run in which every response was ceiling-truncated is **not** a benchmark failure: time to first token and token rates were still measured. It is reported with `successful_trials: 0`, `truncated_trials: 20`, and a censoring limitation.
 
-## Defect 3 — cache and reasoning telemetry was discarded
+## Defect 3: cache and reasoning telemetry was discarded
 
 AIPerf 0.13.0 normalizes `usage_prompt_cache_read_tokens` and `usage_reasoning_tokens`, and both were present in every run. Neither reached the report. Cache-write has no AIPerf metric at all; it exists only in the raw streamed `usage.prompt_tokens_details.created_cache_tokens`, and was never read.
 
@@ -98,16 +99,16 @@ Corrections against the original table:
 |---|---|---|
 | `successful_trials` | 20 in every cell (120 total) | 0, 0, 0, 0, 1, 2 (3 total) |
 | `truncated_trials` | field did not exist | 20, 20, 20, 20, 19, 18 (117 total) |
-| `failed_trials` | 0 | 0 — unchanged; truncation is not an endpoint failure |
+| `failed_trials` | 0 | 0 ;  unchanged; truncation is not an endpoint failure |
 | Per-trial `outcome` | `success` | `output_truncated` for 117 of 120 |
 | Per-trial `attribution` | `unknown` | `harness` for the 117 truncated trials |
 | Per-trial `finish_reason` | `null` | `length` (117), `stop` (3) |
 | `client_estimated_input_tokens` | equal to the provider count | `null`, with the reason recorded |
 | `discrepancy_pct` | `0.0` | `null` under provider accounting |
 | `sizing_verified` | `true`, from a circular comparison | `true`, from provider-versus-target conformance |
-| `request_latency` validity | `valid` / `valid_mean_only` | same state, now flagged `censored: true` |
+| `request_latency` validity | `valid` / `valid_mean_only` | same state, now flagged `censored: true` ;  [Correction 2](GATE3_RESULTS_CORRECTION_2.md) later made `censored` the state itself, with `completion_mean_usable: false` |
 | Cache read / write / reasoning | absent | present, with per-field provenance |
-| TTFT, latency, throughput, input and output token means | — | **unchanged**; the summary metrics were always read correctly |
+| TTFT, latency, throughput, input and output token means | ;  | **unchanged**; the summary metrics were always read correctly |
 
 Latency and TTFT values are identical to the original because they come from AIPerf's summary export and were never mis-parsed. What changed is their interpretation: `request_latency` is now marked right-censored, because for 117 trials it is the time taken to reach the output ceiling, not the time a natural completion would have taken.
 

@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "plan": "standard-profiles-2026-11-01",
+  "doc_version": "1.0",
+  "datestamp": "2026-11-01",
+  "status": "executed",
+  "execution": {
+    "completed_at_utc": "2026-11-02T07:36:13Z",
+    "results_document": "docs/GATE3_STANDARD_PROFILE_RESULTS.md",
+    "runs": [
+      "run-6351f7471cea",
+      "run-4443906cc72b",
+      "run-5379290bed52",
+      "run-dede1f4a445d"
+    ],
+    "note": "All four runs completed with exit code 0 and matching planned/actual HTTP attempts. Artifacts are preserved under docs/gate3-standard-profiles/."
+  },
+  "authorization": {
+    "execution_authorized": true,
+    "authorized_by": "Owner session goal: \"Complete all performance benchmarks\"",
+    "authorized_at_utc": "2026-11-02T07:28:57Z",
+    "scope": "One run each of the quick, standard, reliability, and long-context profiles against the configured deployment, at each profile's declared request count, input size, output ceiling, and concurrency.",
+    "note": "This authorization is limited to the runs listed here. It does not authorize the pilot C=2 cell, the multiwindow qualification experiment, a raised output ceiling, or any qualification claim."
+  },
+  "review_of_pilot_censoring": {
+    "pilot_run": "run-3c188a0e4ce6",
+    "observed": "7 of 20 responses at a 2048-token ceiling were reasoning-only ceiling truncations; the pilot stop rule failed and C=2 was not run.",
+    "implication": "The quick, standard, reliability, and long-context ceilings (256, 512, 128, and 512 tokens) are lower than the ceiling that already censored 35% of a 10K workload. Completion latency in these runs will be right-censored and is not a completion-latency measurement.",
+    "decision": "Run them anyway as declared screening profiles, because the owner asked to complete the performance benchmarks and these profiles measure TTFT, throughput, error outcomes, cache telemetry, and token conformance independently of completion latency. Label every censored result. Do not treat this as ceiling-adequacy evidence."
+  },
+  "pricing_basis": {
+    "source": "https://tokenfactory.nebius.com/models (rendered catalog)",
+    "effective_date": "2026-11-01",
+    "prompt_per_million_tokens": 0.3,
+    "completion_per_million_tokens": 1.2,
+    "verified": true,
+    "safety_multiplier": 1.5
+  },
+  "runs": [
+    {
+      "run_index": 1,
+      "profile": "quick",
+      "request_count": 20,
+      "input_tokens": 2048,
+      "output_ceiling": 256,
+      "concurrency": 2,
+      "request_timeout_s": 120.0,
+      "process_timeout_s": 900.0,
+      "max_requests": 20,
+      "max_usd_ceiling": 0.05,
+      "estimated_cost_usd": 0.027648
+    },
+    {
+      "run_index": 2,
+      "profile": "standard",
+      "request_count": 200,
+      "input_tokens": 4096,
+      "output_ceiling": 512,
+      "concurrency": 4,
+      "request_timeout_s": 180.0,
+      "process_timeout_s": 1200.0,
+      "max_requests": 200,
+      "max_usd_ceiling": 0.7,
+      "estimated_cost_usd": 0.55296
+    },
+    {
+      "run_index": 3,
+      "profile": "reliability",
+      "request_count": 300,
+      "input_tokens": 1024,
+      "output_ceiling": 128,
+      "concurrency": 2,
+      "request_timeout_s": 120.0,
+      "process_timeout_s": 1200.0,
+      "max_requests": 300,
+      "max_usd_ceiling": 0.3,
+      "estimated_cost_usd": 0.20736
+    },
+    {
+      "run_index": 4,
+      "profile": "long-context",
+      "request_count": 8,
+      "input_tokens": 131072,
+      "output_ceiling": 512,
+      "concurrency": 1,
+      "request_timeout_s": 600.0,
+      "process_timeout_s": 1800.0,
+      "max_requests": 8,
+      "max_usd_ceiling": 0.6,
+      "estimated_cost_usd": 0.479232
+    }
+  ],
+  "cost": {
+    "total_estimate_usd": 1.2672,
+    "total_max_usd_ceilings": 1.65,
+    "note": "Client-side conservative upper bounds at the published rates, not provider billing limits."
+  },
+  "stop_rules": {
+    "before_each_run": "Confirm the profile and deployment resolve, the dry-run estimate is below the run guard, and no previous run is still active.",
+    "stop_sequence_on": [
+      "a harness failure, nonzero engine exit without parseable evidence, or process timeout",
+      "a cost guard refusal",
+      "credential exposure or an unexpected environment change"
+    ],
+    "endpoint_errors": "Record as outcomes. A run with endpoint errors still completes if its artifacts parse; do not retry it to make it pass.",
+    "prohibited": [
+      "changing a profile's request count, input size, output ceiling, or concurrency to improve the result",
+      "retrying a failed or censored run",
+      "merging these runs into the pilot or qualification evidence",
+      "claiming completion latency from a censored run"
+    ]
+  },
+  "qualification": {
+    "status": "not_applicable",
+    "note": "These are standard screening profiles. They cannot qualify an endpoint and their evidence is not part of the qualification contract's evaluation sample."
+  }
+}

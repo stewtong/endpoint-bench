@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "plan": "multiwindow-10k-8192",
+  "doc_version": "1.0",
+  "datestamp": "2026-11-01",
+  "status": "stopped_on_censoring",
+  "execution": {
+    "completed_at_utc": "2026-11-02T07:42:24Z",
+    "cells_executed": 1,
+    "cells_planned": 12,
+    "cell_run_id": "run-6cabf9e5ee70-w1-c1",
+    "observed": "2 of 20 responses stopped at the 8192-token ceiling, both reasoning-only; the stop rule fired",
+    "results_document": "docs/GATE3_MULTIWINDOW_8192_RESULTS.md"
+  },
+  "identity": {
+    "distinct_from": [
+      "multiwindow-10k-c1-c2",
+      "pilot-10k-2048",
+      "pilot-10k-8192"
+    ],
+    "reason": "A different output ceiling and a different profile are a different workload identity. The 1024-token plan is not mutated into this one."
+  },
+  "purpose": "exploratory_multiwindow_characterization_not_qualification",
+  "contract_scope_note": "The 1.1 contract scopes a 1024-token output ceiling. This plan uses 8192 and is therefore outside that contract's scope. It is exploratory evidence for a future contract revision; it cannot produce a qualification verdict and is excluded from the 1.1 evaluation sample.",
+  "authorization": {
+    "execution_authorized": true,
+    "authorized_by": "Owner session goal: \"Complete all performance benchmarks\"",
+    "authorized_at_utc": "2026-11-02T07:40:30Z",
+    "scope": "Six windows, each with one 20-request C=1 cell and one 20-request C=2 cell, 10,240 requested input tokens, 8192-token output ceiling, against the configured deployment.",
+    "note": "This authorization covers only the 12 cells described here. It does not authorize a higher ceiling, a different deployment, or any qualification claim."
+  },
+  "design": {
+    "windows": 6,
+    "cells_per_window": 2,
+    "requests_per_cell": 20,
+    "total_trials": 240,
+    "total_http_attempts": 240,
+    "interleaving": "Both concurrency levels run back to back inside each window. Odd windows run C=1 first, even windows run C=2 first, giving three windows starting at each level.",
+    "client_profile": "baseline-normal-client-server-accounting",
+    "client_settings": {
+      "session_affinity": false,
+      "automatic_retries": false,
+      "connection_reuse": "pooled",
+      "token_accounting": "provider_usage",
+      "random_seed": 42
+    },
+    "requested_input_tokens": 10240,
+    "output_ceiling_per_request": 8192,
+    "request_timeout_s": 240.0,
+    "process_timeout_s_per_cell": 2400.0,
+    "window_start_offsets_minutes": [
+      0,
+      10,
+      20,
+      30,
+      40,
+      50
+    ],
+    "estimated_wall_time_minutes": 60,
+    "wall_time_basis": "The clean 8192 pilot took 58 s for 20 requests; the ten-minute offsets leave room for C=2 contention and provider variance. If a pair overruns the next offset, stop and revise rather than overlap."
+  },
+  "ceiling_rationale": {
+    "2048_pilot": "run-3c188a0e4ce6 censored 7 of 20 responses, all reasoning-only.",
+    "8192_pilot": "run-6cabf9e5ee70 completed 20 of 20 naturally; completion lengths 282-3563 tokens, maximum 3563.",
+    "choice": "8192 leaves about 2.3x the largest observed natural completion. It is a declared probe value, not a provider-verified limit.",
+    "adequacy": "Not established by either pilot. The multiwindow is the first repeated observation at this ceiling."
+  },
+  "pricing_basis": {
+    "source": "https://tokenfactory.nebius.com/models (rendered catalog)",
+    "effective_date": "2026-11-01",
+    "prompt_per_million_tokens": 0.3,
+    "completion_per_million_tokens": 1.2,
+    "verified": true,
+    "safety_multiplier": 1.5
+  },
+  "cost": {
+    "estimator": "endpoint_bench.cost.estimate_cost_usd",
+    "per_cell_estimate_usd": 0.387072,
+    "total_estimate_usd": 4.644864,
+    "per_cell_max_usd_ceiling": 0.45,
+    "total_max_usd_ceilings": 5.4,
+    "nominal_input_tokens": 2457600,
+    "nominal_output_tokens": 1966080,
+    "note": "Client-side conservative bound assuming every request reaches the 8192 cap. The clean pilot used about 1,133 output tokens per request, so actual spend is expected to be far below this bound. It is not a provider billing limit."
+  },
+  "stop_rules": {
+    "evaluate_after_each_cell": true,
+    "continue_only_if": [
+      "zero ceiling truncations in the cell just completed",
+      "actual HTTP attempts equal planned requests",
+      "validated engine schema and raw evidence present",
+      "provider-versus-target conformance within the profile tolerance"
+    ],
+    "on_failure": "Stop the sequence. Preserve all artifacts. Do not retry, replace trials, raise the ceiling, or merge cells with different settings. Review censoring, errors, latency and cost, then version a new plan before any further paid run.",
+    "prohibited": [
+      "retrying a cell",
+      "replacing a trial",
+      "raising the output ceiling automatically",
+      "merging this experiment with the 1024-token multiwindow or the pilots",
+      "continuing after a censored cell to make the sample look complete"
+    ]
+  },
+  "qualification": {
+    "status": "not_applicable",
+    "note": "Outside the 1.1 contract's 1024-token scope. No verdict is produced and this evidence is excluded from that contract's evaluation sample."
+  }
+}

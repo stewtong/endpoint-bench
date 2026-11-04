@@ -18,6 +18,10 @@ class MockBehavior(StrEnum):
 
     STREAM_SUCCESS = "stream_success"
     NONSTREAM_SUCCESS = "nonstream_success"
+    STREAM_REASONING_THEN_CONTENT = "stream_reasoning_then_content"
+    STREAM_FRAGMENTED_SSE = "stream_fragmented_sse"
+    STREAM_VISIBLE_TRUNCATED = "stream_visible_truncated"
+    SENTINEL_ECHO = "sentinel_echo"
     RATE_LIMITED = "rate_limited"
     SERVER_ERROR = "server_error"
     HANG_BEFORE_FIRST_TOKEN = "hang_before_first_token"
@@ -38,6 +42,7 @@ class MockBehavior(StrEnum):
     TOOL_CALL_INTERRUPTED = "tool_call_interrupted"
     TOOL_CALL_ABSENT = "tool_call_absent"
     TOOL_CALL_TRUNCATED = "tool_call_truncated"
+    TOOL_CALL_UNKNOWN = "tool_call_unknown"
 
     CONTINUATION_MALFORMED = "continuation_malformed"
     CONTINUATION_HANG = "continuation_hang"
@@ -106,6 +111,10 @@ class MockProvider:
     #: Override the provider-reported prompt token count. Used only to build a
     #: deliberate token-sizing mismatch fixture.
     prompt_tokens_override: int | None = None
+    #: Stream with chunked transfer encoding instead of `Connection: close`.
+    #: Offline session cells need this to observe a genuinely reusable TCP
+    #: transport; the default keeps the historical single-response framing.
+    keep_alive: bool = False
     _server: ThreadingHTTPServer | None = field(default=None, init=False, repr=False)
     _thread: threading.Thread | None = field(default=None, init=False, repr=False)
     requests: list[MockRequest] = field(default_factory=list, init=False)
@@ -253,6 +262,16 @@ class MockProvider:
         if behavior is MockBehavior.MALFORMED_JSON:
             self._write_broken_json(handler)
             return
+        if behavior is MockBehavior.SENTINEL_ECHO:
+            code = _sentinel_from_body(body)
+            self._write_completion(
+                handler,
+                body,
+                content=code or "",
+                stream=stream,
+                tokens=(code,) if code else ("",),
+            )
+            return
         if behavior is MockBehavior.REDIRECT:
             self._write_redirect(handler)
             return
@@ -289,6 +308,7 @@ class MockProvider:
             MockBehavior.TOOL_CALL_INCONSISTENT_ID,
             MockBehavior.TOOL_CALL_INVALID_JSON,
             MockBehavior.TOOL_CALL_INTERRUPTED,
+            MockBehavior.TOOL_CALL_UNKNOWN,
         }
         if body.get("tools") or behavior in tool_behaviors:
             self._respond_tool_call(handler, body, stream)
@@ -306,8 +326,8 @@ class MockProvider:
         final["choices"][0]["finish_reason"] = "length"
         final["usage"] = self._usage(body)
         self._emit(handler, final)
-        handler.wfile.write(b"data: [DONE]\n\n")
-        handler.wfile.flush()
+        self._send_stream_bytes(handler, b"data: [DONE]\n\n")
+        self._end_stream(handler)
 
     def _write_redirect(self, handler: BaseHTTPRequestHandler) -> None:
         handler.send_response(302)
@@ -344,9 +364,10 @@ class MockProvider:
         *,
         content: str,
         stream: bool = False,
+        tokens: tuple[str, ...] | None = None,
     ) -> None:
         if stream:
-            self._stream_text(handler, body)
+            self._stream_text(handler, body, tokens=tokens)
             return
         payload = {
             "id": "chatcmpl-mock",
@@ -360,7 +381,7 @@ class MockProvider:
                     "finish_reason": "stop",
                 }
             ],
-            "usage": self._usage(body),
+            "usage": self._usage(body, completion_tokens=len(tokens or (content,))),
         }
         if self.behavior is MockBehavior.MISSING_USAGE:
             payload.pop("usage")
@@ -371,16 +392,45 @@ class MockProvider:
         handler.end_headers()
         handler.wfile.write(data)
 
-    def _stream_text(self, handler: BaseHTTPRequestHandler, body: dict[str, Any]) -> None:
+    def _stream_text(
+        self,
+        handler: BaseHTTPRequestHandler,
+        body: dict[str, Any],
+        *,
+        tokens: tuple[str, ...] | None = None,
+    ) -> None:
         model = body.get("model", self.model_id)
         behavior = self.behavior
+        output_tokens = tokens if tokens is not None else self.tokens
         self._open_stream(handler)
         if not self._emit(handler, self._chunk(model, delta={"role": "assistant"})):
             return
         if self.first_token_delay_s:
             time.sleep(self.first_token_delay_s)
 
-        for index, token in enumerate(self.tokens):
+        if behavior is MockBehavior.STREAM_REASONING_THEN_CONTENT:
+            for token in ("Reasoning", " about", " the", " fixture", "."):
+                if not self._emit(
+                    handler,
+                    self._chunk(model, delta={"reasoning_content": token}),
+                ):
+                    return
+                if self.chunk_delay_s:
+                    time.sleep(self.chunk_delay_s)
+            for token in output_tokens:
+                if not self._emit(handler, self._chunk(model, delta={"content": token})):
+                    return
+                if self.chunk_delay_s:
+                    time.sleep(self.chunk_delay_s)
+            final = self._chunk(model, delta={})
+            final["choices"][0]["finish_reason"] = "stop"
+            final["usage"] = self._usage(body, completion_tokens=len(output_tokens))
+            self._emit(handler, final)
+            self._send_stream_bytes(handler, b"data: [DONE]\n\n")
+            self._end_stream(handler)
+            return
+
+        for index, token in enumerate(output_tokens):
             if behavior is MockBehavior.HANG_AFTER_FIRST_TOKEN and index == 1:
                 time.sleep(self.hang_seconds)
                 self._close_quietly(handler)
@@ -388,7 +438,11 @@ class MockProvider:
             if behavior is MockBehavior.INTERRUPT_MID_STREAM and index == 2:
                 self._close_quietly(handler)
                 return
-            if not self._emit(handler, self._chunk(model, delta={"content": token})):
+            payload = self._chunk(model, delta={"content": token})
+            if behavior is MockBehavior.STREAM_FRAGMENTED_SSE:
+                if not self._emit_fragmented(handler, payload):
+                    return
+            elif not self._emit(handler, payload):
                 return
             if self.chunk_delay_s:
                 time.sleep(self.chunk_delay_s)
@@ -398,12 +452,14 @@ class MockProvider:
             return
 
         final = self._chunk(model, delta={})
-        final["choices"][0]["finish_reason"] = "stop"
+        final["choices"][0]["finish_reason"] = (
+            "length" if behavior is MockBehavior.STREAM_VISIBLE_TRUNCATED else "stop"
+        )
         if behavior is not MockBehavior.MISSING_USAGE:
-            final["usage"] = self._usage(body)
+            final["usage"] = self._usage(body, completion_tokens=len(output_tokens))
         self._emit(handler, final)
-        handler.wfile.write(b"data: [DONE]\n\n")
-        handler.wfile.flush()
+        self._send_stream_bytes(handler, b"data: [DONE]\n\n")
+        self._end_stream(handler)
 
     # -- tool calls --------------------------------------------------------
 
@@ -414,6 +470,14 @@ class MockProvider:
             name="read_file",
             arguments='{"path": "/tmp/example.txt", "max_bytes": 4096}',
         )
+        if behavior is MockBehavior.TOOL_CALL_UNKNOWN:
+            return [
+                ToolCallSpec(
+                    call_id="call_mock_1",
+                    name="read_secret",
+                    arguments='{"path": "/etc/passwd", "max_bytes": 4096}',
+                )
+            ]
         if behavior is MockBehavior.TOOL_CALL_INVALID_JSON:
             return [
                 ToolCallSpec(
@@ -486,8 +550,8 @@ class MockProvider:
         final["choices"][0]["finish_reason"] = "tool_calls"
         final["usage"] = self._usage(body)
         self._emit(handler, final)
-        handler.wfile.write(b"data: [DONE]\n\n")
-        handler.wfile.flush()
+        self._send_stream_bytes(handler, b"data: [DONE]\n\n")
+        self._end_stream(handler)
 
     def _write_tool_completion(
         self,
@@ -533,10 +597,31 @@ class MockProvider:
         handler.send_response(200)
         handler.send_header("Content-Type", "text/event-stream")
         handler.send_header("Cache-Control", "no-cache")
-        handler.send_header("Connection", "close")
+        if self.keep_alive:
+            handler.send_header("Transfer-Encoding", "chunked")
+        else:
+            handler.send_header("Connection", "close")
         handler.end_headers()
 
-    def _usage(self, body: dict[str, Any] | None = None) -> dict[str, int]:
+    def _send_stream_bytes(self, handler: BaseHTTPRequestHandler, data: bytes) -> None:
+        """Write one SSE unit, chunk-framed when the mock keeps the socket open."""
+        if self.keep_alive:
+            handler.wfile.write(b"%x\r\n%s\r\n" % (len(data), data))
+        else:
+            handler.wfile.write(data)
+        handler.wfile.flush()
+
+    def _end_stream(self, handler: BaseHTTPRequestHandler) -> None:
+        if self.keep_alive:
+            handler.wfile.write(b"0\r\n\r\n")
+            handler.wfile.flush()
+
+    def _usage(
+        self,
+        body: dict[str, Any] | None = None,
+        *,
+        completion_tokens: int | None = None,
+    ) -> dict[str, int]:
         """Report usage derived from the actual request payload.
 
         Deriving rather than hardcoding keeps the happy path internally
@@ -546,12 +631,18 @@ class MockProvider:
         prompt = self.prompt_tokens_override
         if prompt is None:
             prompt = _estimate_prompt_tokens(body or {})
-        completion = len(self.tokens)
-        return {
+        completion = len(self.tokens) if completion_tokens is None else completion_tokens
+        usage = {
             "prompt_tokens": prompt,
             "completion_tokens": completion,
             "total_tokens": prompt + completion,
         }
+        if self.behavior is MockBehavior.STREAM_REASONING_THEN_CONTENT:
+            reasoning = 5
+            usage["completion_tokens_details"] = {"reasoning_tokens": reasoning}
+            usage["completion_tokens"] = completion + reasoning
+            usage["total_tokens"] = prompt + completion + reasoning
+        return usage
 
     def _chunk(self, model: str, delta: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -564,8 +655,26 @@ class MockProvider:
 
     def _emit(self, handler: BaseHTTPRequestHandler, payload: dict[str, Any]) -> bool:
         try:
-            handler.wfile.write(b"data: " + json.dumps(payload).encode() + b"\n\n")
-            handler.wfile.flush()
+            self._send_stream_bytes(
+                handler, b"data: " + json.dumps(payload).encode() + b"\n\n"
+            )
+            return True
+        except (BrokenPipeError, ConnectionResetError):
+            return False
+
+    def _emit_fragmented(
+        self, handler: BaseHTTPRequestHandler, payload: dict[str, Any]
+    ) -> bool:
+        """Write one SSE event across several TCP writes.
+
+        This is what makes the client's line buffering observable: a reader that
+        assumes one `readline()` equals one complete event fails here.
+        """
+        data = b"data: " + json.dumps(payload).encode() + b"\n\n"
+        try:
+            for start in range(0, len(data), 17):
+                self._send_stream_bytes(handler, data[start : start + 17])
+                time.sleep(0.001)
             return True
         except (BrokenPipeError, ConnectionResetError):
             return False
@@ -612,3 +721,21 @@ def _estimate_prompt_tokens(body: dict[str, Any]) -> int:
     if isinstance(tools, list):
         characters += len(json.dumps(tools))
     return max(1, characters // _APPROX_CHARS_PER_TOKEN)
+
+
+def _sentinel_from_body(body: dict[str, Any]) -> str | None:
+    """Return the first SENTINEL- code found in the request, if any."""
+    import re
+
+    messages = body.get("messages")
+    if not isinstance(messages, list):
+        return None
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            match = re.search(r"SENTINEL-[A-F0-9]{12}", content)
+            if match:
+                return match.group(0)
+    return None

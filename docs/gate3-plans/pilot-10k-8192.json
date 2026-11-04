@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "plan": "pilot-10k-8192",
+  "doc_version": "1.0",
+  "datestamp": "2026-11-01",
+  "status": "executed",
+  "execution": {
+    "completed_at_utc": "2026-11-02T07:40:10Z",
+    "run_id": "run-6cabf9e5ee70",
+    "observed": "20 of 20 natural completions; 0 ceiling truncations; lengths 282-3563 tokens",
+    "results_document": "docs/GATE3_MULTIWINDOW_8192_RESULTS.md"
+  },
+  "identity": {
+    "distinct_from": [
+      "pilot-10k-2048",
+      "multiwindow-10k-c1-c2"
+    ],
+    "reason": "A different output ceiling is a different workload identity. This plan does not mutate the 2048 pilot or the 1024 multiwindow experiment."
+  },
+  "purpose": "exploratory_ceiling_probe_not_qualification",
+  "authorization": {
+    "execution_authorized": true,
+    "authorized_by": "Owner session goal: \"Complete all performance benchmarks\"",
+    "authorized_at_utc": "2026-11-02T07:38:30Z",
+    "scope": "One 20-request cell at concurrency 1, 10,240 requested input tokens, 8192-token output ceiling, against the configured deployment.",
+    "note": "This authorization covers only this pilot cell. It does not authorize a multiwindow run, a further ceiling increase, or any qualification claim."
+  },
+  "review_of_prior_pilot": {
+    "prior_run": "run-3c188a0e4ce6",
+    "observed": "7 of 20 responses at a 2048-token ceiling were reasoning-only ceiling truncations; 13 completed naturally at 232-1089 tokens.",
+    "gap": "The stopping point of the reasoning-only subpopulation is unobserved. A 4x ceiling is the smallest declared probe that can test whether it terminates well below the cap.",
+    "ceiling_is_not_provider_verified": true
+  },
+  "design": {
+    "total_requests": 20,
+    "runs": 1,
+    "requests_per_run": 20,
+    "concurrency_levels": [
+      1
+    ],
+    "requested_input_tokens": 10240,
+    "output_ceiling_per_request": 8192,
+    "client_profile": "baseline-normal-client-server-accounting",
+    "client_settings": {
+      "session_affinity": false,
+      "automatic_retries": false,
+      "connection_reuse": "pooled",
+      "token_accounting": "provider_usage",
+      "random_seed": 42
+    },
+    "request_timeout_s": 240.0,
+    "process_timeout_s": 2400.0,
+    "estimated_wall_time_minutes": 30,
+    "wall_time_basis": "The 2048 cell took 220 s for 20 requests. At 8192 and roughly 98 output tokens/s, the worst case is about 28 minutes if every request reaches the cap."
+  },
+  "stop_rule": {
+    "evaluate_after": "the single run",
+    "continue_only_if": [
+      "zero ceiling truncations",
+      "actual HTTP attempts equal planned requests",
+      "validated engine schema and raw evidence present",
+      "provider-versus-target conformance within the profile tolerance"
+    ],
+    "on_failure": "Stop. Preserve artifacts. Do not raise the cap automatically. Review censoring, errors, latency and cost, then version a new plan before any further paid run.",
+    "prohibited": [
+      "retrying a trial",
+      "replacing a trial",
+      "escalating to 16384 automatically",
+      "merging this run with the 2048 pilot or the multiwindow experiment"
+    ],
+    "interpretation_limit": "A clean 20-request cell does not certify the ceiling. It permits consideration of a separately versioned multiwindow design at this ceiling, not a qualification verdict."
+  },
+  "pricing_basis": {
+    "source": "https://tokenfactory.nebius.com/models (rendered catalog)",
+    "effective_date": "2026-11-01",
+    "prompt_per_million_tokens": 0.3,
+    "completion_per_million_tokens": 1.2,
+    "verified": true,
+    "safety_multiplier": 1.5
+  },
+  "cost": {
+    "estimator": "endpoint_bench.cost.estimate_cost_usd",
+    "per_run_estimate_usd": 0.387072,
+    "total_estimate_usd": 0.387072,
+    "max_usd_ceiling_per_run": 0.45,
+    "nominal_input_tokens": 204800,
+    "nominal_output_tokens": 163840,
+    "note": "Client-side conservative bound at published rates, not a provider billing limit or a prediction of spend."
+  },
+  "next_after_clean_pilot": {
+    "authorized": false,
+    "description": "A separately versioned multiwindow design at 8192 would need longer window spacing than the 1024 plan's ten minutes, because cells at this ceiling can take tens of minutes. No such plan is prepared or authorized here."
+  }
+}

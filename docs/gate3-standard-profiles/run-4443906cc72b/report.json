@@ -1,0 +1,540 @@
+{
+  "benchmark_failed": false,
+  "client_profile": {
+    "connection_reuse": "pooled",
+    "enable_gpu_telemetry": false,
+    "enable_server_metrics": false,
+    "identity": "766acbc157e94ea6",
+    "name": "baseline-normal-client-server-accounting",
+    "random_seed": 42,
+    "request_timeout_s": 60.0,
+    "sends_affinity_header": false,
+    "session_affinity": false,
+    "token_accounting_source": "provider_usage",
+    "tokenizer": "builtin",
+    "use_server_token_count": true,
+    "wait_for_model_timeout_s": 0.0
+  },
+  "completion": {
+    "ceiling_truncated": 160,
+    "content_filtered": 0,
+    "finish_reason_absent": 0,
+    "finish_reason_counts": {
+      "length": 160,
+      "stop": 40
+    },
+    "finish_reason_unknown": 0,
+    "latency_censored": true,
+    "latency_censored_fraction": 0.8,
+    "natural_completions": 40,
+    "protocol_completed_trials": 200
+  },
+  "counters": {
+    "cancelled_trials": 0,
+    "failed_trials": 0,
+    "http_attempts": 200,
+    "planned_trials": 200,
+    "protocol_completed_trials": 200,
+    "skipped_trials": 0,
+    "started_trials": 200,
+    "successful_trials": 40,
+    "transport_completed_trials": 200,
+    "truncated_trials": 160
+  },
+  "deployment_key": "tf-deepseek-v4.1-flash-1017",
+  "engine": {
+    "name": "aiperf",
+    "schema_validated": true,
+    "summary_schema_version": "1.4",
+    "version": "0.13.0"
+  },
+  "limitations": [
+    "This report describes client-observed behavior for one endpoint configuration, not model capability.",
+    "Metrics are reported with AIPerf's own units; denominator changes invalidate comparison.",
+    "Token counts come from provider-reported usage, so the throughput denominator is authoritative for the served model. No independent client tokenizer ran, so client-versus-provider agreement was not observed. Workload sizing is instead checked as provider-versus-target conformance against the profile's requested input size.",
+    "160 of 200 completed trials (80%) stopped at the configured output ceiling (`finish_reason: length`). Those trials did not finish naturally, so `request_latency` is a right-censored lower bound on time-to-completion and is marked as censored. Time-to-first-token is unaffected. Success counters exclude these trials and report them as `truncated_trials`.",
+    "119 completed trial(s) spent the entire completion budget on provider-reported reasoning tokens and emitted no visible answer content. Output throughput in this run describes reasoning-token emission, not answer generation.",
+    "Cache-write counts are not exposed by AIPerf 0.13.0 as a metric. They were recovered from the raw streamed `usage.prompt_tokens_details.created_cache_tokens` field and are labelled with that source. Cache-read counts come from AIPerf's normalized `usage_prompt_cache_read_tokens` metric."
+  ],
+  "metric_validity": {
+    "input_sequence_length": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "derived from provider usage, not an independent client tokenization; requested-size comparability is assessed separately",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "inter_token_latency": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "measured directly from response timing",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "output_sequence_length": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "derived from provider usage, not an independent client tokenization; requested-size comparability is assessed separately",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "output_token_throughput": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "provider-token throughput for the workload actually delivered; requested-size comparability is assessed separately",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "overall_usage_prompt_cache_read_pct": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "reported by, or derived directly from, provider usage for the served model",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "reasoning_token_count": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "reported by, or derived directly from, provider usage for the served model",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "request_latency": {
+      "censored": true,
+      "completion_mean_usable": false,
+      "percentiles_usable": false,
+      "reason": "measured directly from response timing; right-censored: 80% of completed trials stopped at the configured output ceiling, so this is a lower bound on time-to-completion",
+      "state": "censored",
+      "statistic_scope": "time_to_termination",
+      "workload_claims_supported": true
+    },
+    "time_to_first_token": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "measured directly from response timing",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "total_reasoning_tokens": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "reported by, or derived directly from, provider usage for the served model",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "total_usage_prompt_cache_read_tokens": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "reported by, or derived directly from, provider usage for the served model",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "total_usage_reasoning_tokens": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "reported by, or derived directly from, provider usage for the served model",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "usage_completion_tokens": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "reported by, or derived directly from, provider usage for the served model",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "usage_prompt_cache_read_tokens": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "reported by, or derived directly from, provider usage for the served model",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "usage_prompt_tokens": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "reported by, or derived directly from, provider usage for the served model",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    },
+    "usage_reasoning_tokens": {
+      "censored": false,
+      "completion_mean_usable": true,
+      "percentiles_usable": true,
+      "reason": "reported by, or derived directly from, provider usage for the served model",
+      "state": "valid",
+      "statistic_scope": "observed_metric",
+      "workload_claims_supported": true
+    }
+  },
+  "metrics": {
+    "input_sequence_length": {
+      "avg": 4165.965,
+      "count": 200,
+      "max": 4269.0,
+      "min": 4086.0,
+      "p50": 4161.0,
+      "p95": 4226.15,
+      "unit": "tokens"
+    },
+    "inter_token_latency": {
+      "avg": 5.410994405744198,
+      "count": 200,
+      "max": 11.787674412915852,
+      "min": 2.680576240704501,
+      "p50": 5.202496644759279,
+      "p95": 8.63517447013353,
+      "unit": "ms"
+    },
+    "output_sequence_length": {
+      "avg": 485.815,
+      "count": 200,
+      "max": 512.0,
+      "min": 245.0,
+      "p50": 512.0,
+      "p95": 512.0,
+      "unit": "tokens"
+    },
+    "output_token_throughput": {
+      "avg": 545.628179690994,
+      "unit": "tokens/sec"
+    },
+    "overall_usage_prompt_cache_read_pct": {
+      "avg": 3.4412195013640297,
+      "unit": "%"
+    },
+    "reasoning_token_count": {
+      "avg": 437.39,
+      "count": 200,
+      "max": 512.0,
+      "min": 124.0,
+      "p50": 512.0,
+      "p95": 512.0,
+      "unit": "tokens"
+    },
+    "request_latency": {
+      "avg": 3534.7692716799997,
+      "count": 200,
+      "max": 7073.318083,
+      "min": 1622.640166,
+      "p50": 3378.4227084999998,
+      "p95": 5620.450933349999,
+      "unit": "ms"
+    },
+    "time_to_first_token": {
+      "avg": 906.060622055,
+      "count": 200,
+      "max": 3605.504375,
+      "min": 486.37483399999996,
+      "p50": 733.3500835,
+      "p95": 1719.3721166499993,
+      "unit": "ms"
+    },
+    "total_reasoning_tokens": {
+      "avg": 87478.0,
+      "unit": "tokens"
+    },
+    "total_usage_prompt_cache_read_tokens": {
+      "avg": 28672.0,
+      "unit": "tokens"
+    },
+    "total_usage_reasoning_tokens": {
+      "avg": 87478.0,
+      "unit": "tokens"
+    },
+    "usage_completion_tokens": {
+      "avg": 485.815,
+      "count": 200,
+      "max": 512.0,
+      "min": 245.0,
+      "p50": 512.0,
+      "p95": 512.0,
+      "unit": "tokens"
+    },
+    "usage_prompt_cache_read_tokens": {
+      "avg": 143.36,
+      "count": 200,
+      "max": 4096.0,
+      "min": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "unit": "tokens"
+    },
+    "usage_prompt_tokens": {
+      "avg": 4165.965,
+      "count": 200,
+      "max": 4269.0,
+      "min": 4086.0,
+      "p50": 4161.0,
+      "p95": 4226.15,
+      "unit": "tokens"
+    },
+    "usage_reasoning_tokens": {
+      "avg": 437.39,
+      "count": 200,
+      "max": 512.0,
+      "min": 124.0,
+      "p50": 512.0,
+      "p95": 512.0,
+      "unit": "tokens"
+    }
+  },
+  "notes": [],
+  "outcomes": {
+    "output_truncated": 160,
+    "success": 40
+  },
+  "profile_name": "standard",
+  "provenance": {
+    "affinity": {
+      "affinity_header_expected": false,
+      "mode": "baseline_no_affinity"
+    },
+    "artifacts": {
+      "config_path": "aiperf-config.yaml",
+      "config_sha256": "37d302b6e6f300e3d51dfc18f4bece522b47d4ac460742083e4c98b2ea037ff2",
+      "engine_artifacts_dir": "aiperf",
+      "raw_artifacts_present": true,
+      "trials_path": "trials.jsonl"
+    },
+    "client": {
+      "connection_reuse": "pooled",
+      "enable_gpu_telemetry": false,
+      "enable_server_metrics": false,
+      "identity": "766acbc157e94ea6",
+      "name": "baseline-normal-client-server-accounting",
+      "random_seed": 42,
+      "request_timeout_s": 60.0,
+      "sends_affinity_header": false,
+      "session_affinity": false,
+      "token_accounting_source": "provider_usage",
+      "tokenizer": "builtin",
+      "use_server_token_count": true,
+      "wait_for_model_timeout_s": 0.0
+    },
+    "completion": {
+      "ceiling_truncated": 160,
+      "content_filtered": 0,
+      "finish_reason_absent": 0,
+      "finish_reason_counts": {
+        "length": 160,
+        "stop": 40
+      },
+      "finish_reason_unknown": 0,
+      "latency_censored": true,
+      "latency_censored_fraction": 0.8,
+      "natural_completions": 40,
+      "protocol_completed_trials": 200
+    },
+    "cost_preflight": {
+      "ceiling_usd": 0.7,
+      "completion_per_million_tokens": 1.2,
+      "estimate_usd": 0.55296,
+      "note": "A client-side ceiling is not a hard provider billing limit. Provider-side enforcement is required before claiming one.",
+      "planned_input_tokens": 819200,
+      "planned_output_tokens": 102400,
+      "pricing_effective_date": "2026-11-01",
+      "pricing_source": "https://tokenfactory.nebius.com/models (rendered catalog)",
+      "pricing_verified": true,
+      "prompt_per_million_tokens": 0.3,
+      "safety_multiplier": 1.5,
+      "within_ceiling": true
+    },
+    "deployment": {
+      "deployment_key": "tf-deepseek-v4.1-flash-1017",
+      "destination_host": "api.tokenfactory.nebius.com",
+      "model_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "model_revision": null,
+      "protocol": "openai-chat-completions",
+      "provider_name": "tokenfactory-nebius",
+      "region": "us-north1"
+    },
+    "engine": {
+      "name": "aiperf",
+      "result_schema_version": "1.4",
+      "schema_validated": true,
+      "version": "0.13.0"
+    },
+    "profile": {
+      "name": "standard",
+      "planned_requests": 200,
+      "requested_input_tokens": 4096,
+      "requested_max_output_tokens": 512,
+      "schema_version": "1.0",
+      "sha256": "041f5a2ad0312a16624e235a3ad7e3875a0299a03c5fce6785b057ac1a07e354"
+    },
+    "requests": {
+      "actual_http_attempts": 200,
+      "difference": 0,
+      "planned_trials": 200,
+      "reconciliation": "match"
+    },
+    "retry_policy": {
+      "automatic_retries": false,
+      "note": "The harness issues no automatic retries; one trial is one HTTP attempt. AIPerf 0.13.0 does not retry inference requests either."
+    },
+    "termination": {
+      "process_group_gone": true,
+      "reaped": true,
+      "reason": "completed",
+      "sigkill_sent": false,
+      "sigterm_sent": false
+    },
+    "timeouts": {
+      "process_deadline_s": 1200.0,
+      "readiness_probe_timeout_s": 0.0,
+      "request_timeout_s": 60.0
+    },
+    "tokens": {
+      "accounting_sources": {
+        "provider_usage": 200
+      },
+      "claims_supported": true,
+      "client_estimates_coinciding_with_provider": 0,
+      "client_vs_provider": {
+        "failed": 0,
+        "not_observed": 200,
+        "unverifiable": 0,
+        "verified": 0
+      },
+      "outside_tolerance": 0,
+      "primary_checks": {
+        "client_vs_provider": 0,
+        "provider_vs_target": 200
+      },
+      "provider_vs_target": {
+        "failed": 0,
+        "not_observed": 0,
+        "unverifiable": 0,
+        "verified": 200
+      },
+      "trials_evaluated": 200,
+      "unverifiable": 0,
+      "within_tolerance": 200
+    },
+    "workload_label": "Synthetic single-turn traffic generated from a fixed seed.",
+    "workload_type": "synthetic_single_turn"
+  },
+  "provider_telemetry": {
+    "cache_write_source": "raw_response_usage",
+    "metrics": {
+      "cache_read_tokens": {
+        "sum": 28672,
+        "trials_reporting": 200,
+        "trials_total": 200
+      },
+      "cache_write_tokens": {
+        "sum": 791808,
+        "trials_reporting": 200,
+        "trials_total": 200
+      },
+      "reasoning_tokens": {
+        "sum": 87478,
+        "trials_reporting": 200,
+        "trials_total": 200
+      },
+      "visible_output_tokens": {
+        "sum": 9685,
+        "trials_reporting": 200,
+        "trials_total": 200
+      }
+    },
+    "reasoning_only_completions": 119,
+    "sources": [
+      "aiperf_metric",
+      "derived:provider_output_minus_reasoning",
+      "raw_response_usage"
+    ]
+  },
+  "run": {
+    "argv": [
+      ".venv-aiperf/bin/aiperf",
+      "profile",
+      "--config",
+      "runs/run-4443906cc72b/aiperf-config.yaml",
+      "--output-artifact-dir",
+      "runs/run-4443906cc72b/aiperf",
+      "--wait-for-model-timeout",
+      "0",
+      "--no-auto-plot"
+    ],
+    "artifact_dir": "runs/run-4443906cc72b/aiperf",
+    "cancelled": false,
+    "client_identity": "766acbc157e94ea6",
+    "config_sha256": "37d302b6e6f300e3d51dfc18f4bece522b47d4ac460742083e4c98b2ea037ff2",
+    "duration_ms": 181035.84454092197,
+    "environment_names": [
+      "NEBIUS_API_KEY",
+      "AIPERF_HTTP_X_SESSION_AFFINITY_FROM_CORRELATION_ID"
+    ],
+    "exit_code": 0,
+    "notes": [],
+    "stderr_path": "runs/run-4443906cc72b/aiperf/logs/endpoint-bench-aiperf-stderr.log",
+    "stdout_path": "runs/run-4443906cc72b/aiperf/logs/endpoint-bench-aiperf-stdout.log",
+    "termination": {
+      "process_group_gone": true,
+      "reaped": true,
+      "reason": "completed",
+      "sigkill_sent": false,
+      "sigterm_sent": false
+    },
+    "timed_out": false
+  },
+  "run_id": "run-4443906cc72b",
+  "schema_version": "0.2.0",
+  "token_accounting": {
+    "accounting_sources": {
+      "provider_usage": 200
+    },
+    "claims_supported": true,
+    "client_estimates_coinciding_with_provider": 0,
+    "client_vs_provider": {
+      "failed": 0,
+      "not_observed": 200,
+      "unverifiable": 0,
+      "verified": 0
+    },
+    "outside_tolerance": 0,
+    "primary_checks": {
+      "client_vs_provider": 0,
+      "provider_vs_target": 200
+    },
+    "provider_vs_target": {
+      "failed": 0,
+      "not_observed": 0,
+      "unverifiable": 0,
+      "verified": 200
+    },
+    "trials_evaluated": 200,
+    "unverifiable": 0,
+    "within_tolerance": 200
+  },
+  "trials_sha256": "d25620518d31a0279d0520f7fc2b305cf679cadd80c9058dc633f407aecfa7b8",
+  "warnings": []
+}

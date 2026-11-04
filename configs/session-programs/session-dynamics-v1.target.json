@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "deployment_key": "tf-deepseek-v4.1-flash-1017",
+  "model_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "base_url": "https://api.tokenfactory.nebius.com",
+  "protocol": "openai-chat-completions",
+  "region": "us-north1",
+  "credential_env_name": "NEBIUS_API_KEY",
+  "model_revision": null,
+  "pricing": {
+    "prompt_per_million_tokens": 0.3,
+    "completion_per_million_tokens": 1.2,
+    "verified": true,
+    "source": "https://tokenfactory.nebius.com/models (rendered catalog)",
+    "effective_date": "2026-11-01",
+    "note": "Retained local rate card for the existing CLI cost guard. D0008 performed no price research and changed no rate."
+  },
+  "binding_source": "Current local operator configuration plus META-D0008-MODELS. One read-only GET https://api.tokenfactory.nebius.com/v1/models returned HTTP 200 on 2026-11-03 and listed the exact model id `deepseek-ai/DeepSeek-V4.1-Flash-1017`. Region `us-north1`, protocol `openai-chat-completions` and revision null are operator-declared; the listing does not expose region or revision, and it is not feature, context or limit proof. Full record: docs/session-dynamics-v1/TARGET_BINDING.json.",
+  "binding_document": "docs/session-dynamics-v1/TARGET_BINDING.json",
+  "binding_status": "CURRENT_VERIFIED"
+}

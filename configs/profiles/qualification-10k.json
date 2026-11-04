@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "name": "qualification-10k",
-  "description": "10k input qualification cell. Same workload as screening-10k but with a 1024-token output ceiling. Screening at 256 tokens cut 117 of 120 responses at the ceiling; the three that finished naturally used 217-249 tokens, so 256 sat right at the natural boundary. 1024 gives roughly 4x the observed natural completion length. This profile is NOT sufficient for qualification on its own: see docs/qualification/10k-slo-contract.md.",
+  "description": "10k input cell with a 1024-token output ceiling. Screening at 256 tokens censored 117 of 120 responses; the three that completed naturally used 217-249 tokens, which describes those three trials and does not identify the length tail above 256 or establish that 1024 is adequate. The ceiling is a declared choice, not a measured one. This profile alone is not sufficient for any qualification claim: see docs/qualification/README.md.",
   "request_count": 20,
   "input_tokens": 10240,
   "max_output_tokens": 1024,
@@ -13,6 +13,6 @@
     "status": "provisional",
     "screening": false,
     "contract": "docs/qualification/10k-slo-contract.json",
-    "note": "One cell in a multi-window design. A single window never yields a qualification verdict. Performance thresholds in the contract are unratified, so the only reachable verdict today is `inconclusive`."
+    "note": "One cell in a multi-window design. A single window never yields a qualification verdict, and the 1024-token ceiling is untested. Performance thresholds in the contract are unratified, so the only reachable verdict today is `inconclusive`."
   }
 }
